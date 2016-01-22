@@ -261,14 +261,19 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT):
     Convert a parsed NamedStruct (probably with additional NamedStruct as fields) into a
     JSON-friendly format, with only Python primitives (dictionaries, lists, bytes, integers etc.)
     Then you may use json.dumps, or pprint to further process the result.
+    
     :param val: parsed result, may contain NamedStruct
+    
     :param humanread: if True (default), convert raw data into readable format with type-defined formatters.
-            For example, enumerators are converted into names, IP addresses are converted into dotted formats, etc. 
+            For example, enumerators are converted into names, IP addresses are converted into dotted formats, etc.
+             
     :param dumpextra: if True, dump "extra" data in '_extra' field. False (default) to ignore them.
+    
     :param typeinfo: Add struct type information in the dump result. May be the following values:
       - DUMPTYPE_FLAT ('flat'), add a field '_type' for the type information (default)
       - DUMPTYPE_KEY ('key'), convert the value to dictionary like: {'<struc_type>': value}
       - DUMPTYPE_NONE ('none'), do not add type information
+      
     :returns: "dump" format of val, suitable for JSON-encode or print.
     '''
     if val is None:
@@ -1657,47 +1662,63 @@ class nstruct(typedef):
     def __init__(self, *members, **arguments):
         '''
         nstruct initializer, create a new nstruct type
-        :param *members: field definitions, either named or anonymous; named field is a tuple with 2 members
+        
+        :param members: field definitions, either named or anonymous; named field is a tuple with 2 members
                         (type, name); anonymous field is a tuple with only 1 member (type,)
-        :param **arguments: optional keyword arguments, see nstruct docstring for more details:
+                        
+        :param arguments: optional keyword arguments, see nstruct docstring for more details:
+        
                 size
                     A function to retrieve the struct size
+                    
                 prepack
                     A function to be executed just before packing, usually used to automatically store
                     the struct size to a specified field (with packsize() or packrealsize())
+                    
                 base
                     This type is a sub-class type of a base type, should be used with criteria and/or
                     classifyby
+                    
                 criteria
                     A function determines whether this struct (of base type) should be sub-classed into
                     this type
+                    
                 endian
                     Default to '>' as big endian or "network order". Specify '<' to use little endian.
+                    
                 padding
                     Default to 8. The struct is automatically padded to align to "padding" bytes boundary,
                     i.e. padding the size to be ((_realsize + (padding - 1)) // padding). Specify 1 to
                     disable alignment.
+                    
                 lastextra
                     Strictly specify whether the unused bytes should be considered to be the "extra" data of
                     the last field, or the "extra" data of the struct itself. See nstruct docstring for
                     more details.
+                    
                 name
                     Specify a readable struct name. It is always recommended to specify a name.
                     A warning is generated if you do not specify one.
+                    
                 inline
                     Specify if the struct can be "inlined" into another struct. See nstruct docstring for
                     details.
+                    
                 init
                     initializer of the struct, executed when a new struct is created with new()
+                    
                 classifier
                     defined in a base class to get a classify value, see nstruct docstring for details
+                    
                 classifyby
                     a tuple of hashable values. The values is inserted into a dictionary to quickly
                     find the correct sub-class type with classify value. See nstruct docstring for details.
+                    
                 formatter
                     A customized function to modify the human readable dump result. The input parameter
                     is the current dump result; the return value is the modified result, and will replace
                     the current dump result.
+                    
                 extend
                     Another method to modify the human readable dump result of the struct. It uses the
                     corresponding type to format the specified field, instead of the default type,
@@ -2009,14 +2030,18 @@ class enum(prim):
         '''
         Initializer
         :param readablename: name of this enumerate type
-        :param namespace: A dictionary, usually specify globals(). The **kwargs are updated to this
+        
+        :param namespace: A dictionary, usually specify globals(). The *kwargs* are updated to this
                         dictionary, so the enumerate names are exported to current globals and you
                         do not need to define them in the module again. None to disable this feature.
+                        
         :param basefmt: base type of this enumerate type, can be format strings or a *prim* type
+        
         :param bitwise: if True, the enumerate type is bitwise, and will be formatted to space-separated
                         names; if False, the enumerate type is non-bitwise and will be formatted to a
                         single name.
-        :param **kwargs: ENUMERATE_NAME = ENUMERATE_VALUE format definitions of enumerate values.
+                        
+        :param kwargs: ENUMERATE_NAME = ENUMERATE_VALUE format definitions of enumerate values.
         '''
         if hasattr(basefmt, '_format'):
             prim.__init__(self, basefmt._format, readablename, basefmt._endian, basefmt._strict)
@@ -2489,17 +2514,23 @@ class bitfield(typedef):
         '''
         Initializer
         :param basetype: A integer primitive type to provide the bits
+        
         :param properties: placed arguments, definitions of fields. Each argument is a tuple,
                            the first element is the bit-width, the second element is a field name.
                            If a third element appears, the field is an bit-field array; if the
                            second element does not appear, the field is some padding bits.
+                           
         :param arguments: keyword options
+        
                         name
                             the type name
+                            
                         init
                             a initializer to initialize the struct
+                            
                         extend
                             similar to *extend* option in nstruct
+                            
                         formatter
                             similar to *formatter* option in nstruct
         '''

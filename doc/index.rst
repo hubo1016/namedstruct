@@ -9,19 +9,24 @@ Welcome to namedstruct's documentation!
 Contents:
 
 .. autoclass:: namedstruct.namedstruct.typedef
+   :special-members:
    :members:
 .. autoclass:: namedstruct.namedstruct.nstruct
+   :special-members:
    :members:
 .. autoclass:: namedstruct.namedstruct.enum
+   :special-members:
    :members:
 .. autoclass:: namedstruct.namedstruct.bitfield
+   :special-members:
    :members:
 .. autoclass:: namedstruct.namedstruct.optional
+   :special-members:
    :members:
 .. autoclass:: namedstruct.namedstruct.darray
+   :special-members:
    :members:
-.. automodule:: namedstruct.stdprim
-   :members:
+.. autofunction:: namedstruct.namedstruct.dump
 .. toctree::
    :maxdepth: 2
 
