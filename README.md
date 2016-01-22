@@ -14,3 +14,9 @@ headers with some rules and created the types in **several days**. I even keep t
 
 Another example parses GZIP file header, which is a little-endian format. It is used in HTTP implementation in VLCP
 to extract the deflate data from a GZIP-encoded content without creating a in-memory file. 
+
+The project name in PyPI is nstruct. Install with PyPI::
+
+	pip install nstruct
+
+This project supports both Python2.x and Python3.x.

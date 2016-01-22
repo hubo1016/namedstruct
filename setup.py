@@ -13,7 +13,7 @@ from setuptools import setup, find_packages
 
 VERSION = '1.0.0'
 
-setup(name='namedstruct',
+setup(name='nstruct',
       version=VERSION,
       description='Define complicate C/C++ structs in Python to parse/pack them from/to raw bytes',
       author='Hu Bo',
