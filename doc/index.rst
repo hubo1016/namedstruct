@@ -8,6 +8,8 @@ Welcome to namedstruct's documentation!
 
 Contents:
 
+.. autoclass:: namedstruct.namedstruct.typedef
+   :members:
 .. autoclass:: namedstruct.namedstruct.nstruct
    :members:
 .. autoclass:: namedstruct.namedstruct.enum

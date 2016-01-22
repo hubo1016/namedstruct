@@ -1078,7 +1078,8 @@ class CstrParser(object):
 
 class typedef(object):
     '''
-    Base class for type definitions.
+    Base class for type definitions. Types defined with *nstruct*, *prim*, *optional*, *bitfield*
+    all have these interfaces.
     '''
     def parser(self):
         '''
@@ -1090,10 +1091,12 @@ class typedef(object):
     def parse(self, buffer):
         '''
         Parse the type from specified bytes stream, and return the first one if exists.
+        
         :param buffer: bytes from a stream, may contains only part of the struct, exactly one struct, or
                 additional bytes after the struct.
+                       
         :returns: None if the data is incomplete; (data, size) else, where data is the parsed data, size is
-                the used bytes length, so the next struct begins from buffer[size:]
+                  the used bytes length, so the next struct begins from buffer[size:]
         '''
         return self.parser().parse(buffer)
     def create(self, buffer):
@@ -1112,8 +1115,10 @@ class typedef(object):
         '''
         Create a new object of this type. It is also available as __call__, so you can create a new object
         just like creating a class instance: a = mytype(a=1,b=2)
-        :param **kwargs: extra key-value arguments, each one will be set on the new object, to set value
-                to the fields conveniently.
+        
+        :param kwargs: extra key-value arguments, each one will be set on the new object, to set value
+                       to the fields conveniently.
+        
         :returns: a new object, with the specified "kwargs" set.
         '''
         obj = self.parser().new()
