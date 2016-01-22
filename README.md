@@ -1,10 +1,10 @@
 # namedstruct
 Define complicated C/C++ structs in Python with variable length arrays, header/extend relations, extensible structures in one time, parse/rebuild them with a single line of code
 
-This library is designed for Openflow structures parsing in VLCP (https://github.com/hubo1016/vlcp) project.
+This library is designed for Openflow structures parsing in [VLCP](https://github.com/hubo1016/vlcp) project.
 It is also used 
 
-The documents are still in-progress, see docstring in namedstruct.namedstruct for details.
+Some documents are hosted on [readthedocs](http://namedstruct.readthedocs.org/en/latest/). They are still in-progress, see docstring in namedstruct.namedstruct for details.
 
 Some examples are given in *misc* package, including a complete definition of Openflow 1.0, 1.3 and Nicira
 extensions. They are not part of the library but can be used freely. The Openflow structures are very
