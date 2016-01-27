@@ -1771,8 +1771,8 @@ class nstruct(typedef):
         lastinline_properties = []
         seqs = []
         endian = arguments.get('endian', '>')
-        if not members and self.base is None and self.sizefunc is None:
-            raise ValueError('Struct cannot be empty')
+        if not members:
+            self.inlineself = False
         mrest = len(members)
         for m in members:
             mrest -= 1
