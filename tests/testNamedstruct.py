@@ -92,6 +92,13 @@ class Test(unittest.TestCase):
         array2, size = s2.parse(b)
         self.assertEqual(size, len(b))
         self.assertEqual(dump(array, False), dump(array2, False))
+    def testEmptyBase(self):
+        s1 = nstruct(name = 's1', padding = 1, classifier = lambda x: x.type)
+        s2 = nstruct((uint16, 'a'), base = s1, classifyby = (1,), name = 's2')
+        s3 = nstruct((uint8,'type'),(s1,),padding = 1, name = 's3', lastextra = True)
+        r = s3.create(b'\x01\x00\x02')
+        self.assertEqual(r.a, 2)
+        self.assertEqual(r._tobytes(), b'\x01\x00\x02')
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

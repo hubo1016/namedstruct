@@ -534,6 +534,7 @@ class Parser(object):
         '''
         c = _create_struct(self, inlineparent)
         c._unpack(data)
+        self.subclass(c)
         return c
     def paddingsize(self, namedstruct):
         '''
@@ -1113,8 +1114,6 @@ class typedef(object):
         :raises: BadFormatError or BadLenError if the bytes cannot completely form this type.
         '''
         d = self.parser().create(buffer)
-        if hasattr(self.parser(), 'subclass'):
-            self.parser().subclass(d)
         return d
     def new(self, **kwargs):
         '''
