@@ -2,7 +2,7 @@
 Define complicated C/C++ structs in Python with variable length arrays, header/extend relations, extensible structures in one time, parse/rebuild them with a single line of code
 
 This library is designed for Openflow structures parsing in [VLCP](https://github.com/hubo1016/vlcp) project.
-It is also used 
+It is also used to parse GZIP header, HTTP2 frames, etc.
 
 Some documents are hosted on [readthedocs](http://namedstruct.readthedocs.org/en/latest/). They are still in-progress, see docstring in namedstruct.namedstruct for details.
 
