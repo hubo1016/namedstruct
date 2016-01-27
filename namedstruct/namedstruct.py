@@ -230,17 +230,17 @@ class EmbeddedStruct(NamedStruct):
         '''
         Get attribute value from NamedStruct.
         '''
-        if not name.startswith('_'):
+        if name[:1] != '_':
             return getattr(self._target, name)
         else:
             raise AttributeError('%r is not defined' % (name,))
     def __setattr__(self, name, value):
-        if not name.startswith('_'):
+        if name[:1] != '_':
             setattr(self._target, name, value)
         else:
             object.__setattr__(self, name, value)
     def __delattr__(self, name):
-        if not name.startswith('_'):
+        if name[:1] != '_':
             delattr(self._target, name)
         else:
             object.__delattr__(self, name)
@@ -281,10 +281,10 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT):
     if isinstance(val, NamedStruct):
         t = val._gettype()
         if t is None:
-            r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if not k.startswith('_'))
+            r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if not k[:1] != '_')
         else:
             if humanread:
-                r = t.formatdump(dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if not k.startswith('_')))
+                r = t.formatdump(dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_'))
                 if hasattr(val, '_seqs'):
                     for s in val._seqs:
                         st = s._gettype()
@@ -296,7 +296,7 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT):
                     except:
                         NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
             else:
-                r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if not k.startswith('_'))
+                r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_')
         if dumpextra:
             extra = val._getextra()
             if extra:
@@ -308,7 +308,7 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT):
                 r = {'<' + repr(t) + '>' : r}
         return r
     elif isinstance(val, InlineStruct):
-        return dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if not k.startswith('_'))
+        return dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_')
     elif isinstance(val, list) or isinstance(val, tuple):
         return [dump(v, humanread, dumpextra, typeinfo) for v in val]
     else:
@@ -411,7 +411,7 @@ class InlineStruct(object):
     def __init__(self, parent):
         self._parent = parent
     def __repr__(self, *args, **kwargs):
-        return repr(dict((k,v) for k,v in self.__dict__ if not k.startswith('_')))
+        return repr(dict((k,v) for k,v in self.__dict__ if k[:1] != '_'))
 
 
 def _never(namedstruct):
@@ -1121,13 +1121,22 @@ class typedef(object):
         just like creating a class instance: a = mytype(a=1,b=2)
         
         :param kwargs: extra key-value arguments, each one will be set on the new object, to set value
-                       to the fields conveniently.
+                       to the fields conveniently. If the key is a struct type name prepended by '_',
+                       the corresponded value should be a struct type based on the type with name in the key,
+                       and the embedded struct will be created with that type instead of the default type.
+                       It is the only ways to initialize an embedded struct to another type based on
+                       the embedded struct type. Only the "directly" embedded struct can be set;
+                       an embedded struct in another embedded struct can not be set this way.
         
         :returns: a new object, with the specified "kwargs" set.
         '''
         obj = self.parser().new()
         for k,v in kwargs.items():
-            setattr(obj, k, v)
+            if k[:1] == '_':
+                obj._seqs[self.inline_names[k[1:]]] = v.parser().new(obj)
+        for k,v in kwargs.items():
+            if k[:1] != '_':
+                setattr(obj, k, v)
         return obj
     def __call__(self, **kwargs):
         '''
@@ -1769,6 +1778,7 @@ class nstruct(typedef):
         lastinline_format = []
         lastinline_properties = []
         seqs = []
+        inline_names = {}
         endian = arguments.get('endian', '>')
         if not members:
             self.inlineself = False
@@ -1863,6 +1873,9 @@ class nstruct(typedef):
                 else:
                     if array is not None:
                         raise ValueError('Illegal inline array: ' + repr(m))
+                    t_name = getattr(t, 'readablename', None)
+                    if t_name:
+                        inline_names[t_name] = len(seqs)
                     seqs.append((t, None))
         self._inline = None
         if lastinline_format:
@@ -1893,6 +1906,7 @@ class nstruct(typedef):
                         self.lastextra = True
                     else:
                         self.lastextra = False
+        self.inline_names = inline_names
         if 'extend' in arguments:
             for k,v in arguments['extend'].items():
                 if isinstance(k, tuple):
