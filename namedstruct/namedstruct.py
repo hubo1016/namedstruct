@@ -51,6 +51,14 @@ class NamedStruct(object):
         '''
         _set(self, '_parser', parser)
         _set(self, '_target', self)
+    def _create_embedded_indices(self):
+        '''
+        Create indices for all the embedded structs. For parser internal use.
+        '''
+        try:
+            _set(self, '_embedded_indices', dict((k,(self,v)) for k,v in getattr(self._parser.typedef, 'inline_names', {}).items()))
+        except KeyError:
+            _set(self, '_embedded_indices', {})
     def _unpack(self, data):
         '''
         Unpack a struct from bytes. For parser internal use.
@@ -213,6 +221,20 @@ class NamedStruct(object):
             NamedStruct.__init__(self, t, state[0], state[2])
         if hasattr(self._parser, 'subclass'):
             self._parser.subclass(self)
+    def _replace_embedded_type(self, name, newtype):
+        '''
+        Replace the embedded struct to a newly-created struct of another type (usually based on the
+        original type). The attributes of the old struct is NOT preserved.
+        
+        :param name: either the original type, or the name of the original type. It is always the type
+                     used in type definitions, even if it is already replaced once or more.
+                     
+        :param newtype: the new type to replace
+        '''
+        if hasattr(name, 'readablename'):
+            name = name.readablename
+        t,i = self._target._embedded_indices[name]
+        t._seqs[i] = newtype.parser().new(self._target)
     @staticmethod
     def _registerPickleType(name, typedef):
         '''
@@ -226,6 +248,11 @@ class EmbeddedStruct(NamedStruct):
     def __init__(self, parser, inlineparent):
         NamedStruct.__init__(self, parser)
         _set(self, '_target', inlineparent)
+    def _create_embedded_indices(self):
+        '''
+        Create indices for all the embedded structs. For parser internal use.
+        '''
+        self._target._embedded_indices.update(((k,(self,v)) for k,v in getattr(self._parser, 'inline_names', {}).items()))
     def __getattr__(self, name):
         '''
         Get attribute value from NamedStruct.
@@ -248,9 +275,11 @@ class EmbeddedStruct(NamedStruct):
 
 def _create_struct(parser, inlineparent = None):
     if inlineparent is None:
-        return NamedStruct(parser)
+        r = NamedStruct(parser)
     else:
-        return EmbeddedStruct(parser, inlineparent)
+        r = EmbeddedStruct(parser, inlineparent)
+    r._create_embedded_indices()
+    return r
     
 DUMPTYPE_FLAT = 'flat'
 DUMPTYPE_KEY = 'key'
@@ -1115,25 +1144,36 @@ class typedef(object):
         '''
         d = self.parser().create(buffer)
         return d
-    def new(self, **kwargs):
+    def new(self, *args, **kwargs):
         '''
         Create a new object of this type. It is also available as __call__, so you can create a new object
         just like creating a class instance: a = mytype(a=1,b=2)
         
-        :param kwargs: extra key-value arguments, each one will be set on the new object, to set value
+        :param args,kwargs: extra key-value arguments, each one will be set on the new object, to set value
                        to the fields conveniently. If the key is a struct type name prepended by '_',
                        the corresponded value should be a struct type based on the type with name in the key,
                        and the embedded struct will be created with that type instead of the default type.
-                       It is the only ways to initialize an embedded struct to another type based on
-                       the embedded struct type. Only the "directly" embedded struct can be set;
-                       an embedded struct in another embedded struct can not be set this way.
+                       It is similar to call _replace_embedded_type on the created struct.
+                       Both the "directly" embedded struct and the embedded struct inside another
+                       embedded struct can be set.
+                       
+                       *args* are tuples which contains key-value pairs. They are similar to kwargs,
+                       but the order is preserved, so you can first replace an embedded struct, then
+                       replace another embedded struct inside the replaced struct.
         
         :returns: a new object, with the specified "kwargs" set.
         '''
         obj = self.parser().new()
+        for k,v in args:
+            if k[:1] == '_':
+                t,i = obj._embedded_indices[k[:1]]
+                t._seqs[i] = v.parser().new(obj)
+            else:
+                setattr(obj, k, v)
         for k,v in kwargs.items():
             if k[:1] == '_':
-                obj._seqs[self.inline_names[k[1:]]] = v.parser().new(obj)
+                t,i = obj._embedded_indices[k[1:]]
+                t._seqs[i] = v.parser().new(obj)
         for k,v in kwargs.items():
             if k[:1] != '_':
                 setattr(obj, k, v)
