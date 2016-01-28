@@ -99,8 +99,38 @@ class Test(unittest.TestCase):
         r = s3.create(b'\x01\x00\x02')
         self.assertEqual(r.a, 2)
         self.assertEqual(r._tobytes(), b'\x01\x00\x02')
-        s = s3(_s1 = s2, a = 3)
+        s = s3((s1, s2), a = 3)
         self.assertEqual(s._tobytes(), b'\x01\x00\x03')
+    def testEmbeddedTypes(self):
+        s1 = nstruct(name = 's1', padding = 1, classifier = lambda x: x.type, size = lambda x: 2 if x.type == 1 else 0)
+        s2 = nstruct((uint16, 'a'), base = s1, classifyby = (1,), name = 's2', init = packvalue(1, 'type'))
+        # Embedded struct
+        s3 = nstruct((uint8,'type'),(s1,),padding = 1, name = 's3')
+        # Embedded struct in an inherited type
+        s4 = nstruct((uint8, 'maintype'), (uint8, 'type'), padding = 1, name = 's4')
+        s5 = nstruct((s1,), base = s4, criteria = lambda x: x.maintype == 1, init = packvalue(1, 'maintype'),
+                     name = 's5', lastextra = True)
+        # Embedded struct in another embedded type
+        s6 = nstruct((s1,),padding = 1, name = 's6', inline = False)
+        s7 = nstruct((uint8,'type'),(uint8,'type2'),(s6,),padding = 1, name = 's7', lastextra = True)
+        # Replace after replace
+        s8 = nstruct((uint16, 'b'), base = s6, name = 's8', criteria = lambda x: x.type2 == 3, init = packvalue(3, 'type2'))
+        s = s3((s1,s2), a = 3)
+        b = s._tobytes()
+        self.assertEqual(b, b'\x01\x00\x03')
+        self.assertEqual(dump(s3.create(b), False), dump(s, False))
+        s = s5((s1,s2), a = 3)
+        b = s._tobytes()
+        self.assertEqual(b, b'\x01\x01\x00\x03')
+        self.assertEqual(dump(s5.create(b), False), dump(s, False))
+        s = s7((s1,s2), a = 3)
+        b = s._tobytes()
+        self.assertEqual(b, b'\x01\x00\x00\x03')
+        self.assertEqual(dump(s7.create(b), False), dump(s, False))
+        s = s7((s6,s8), (s1,s2), a = 2, b = 6)
+        b = s._tobytes()
+        self.assertEqual(b, b'\x01\x03\x00\x02\x00\x06')
+        self.assertEqual(dump(s7.create(b), False), dump(s, False))
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

@@ -57,7 +57,7 @@ class NamedStruct(object):
         '''
         try:
             _set(self, '_embedded_indices', dict((k,(self,v)) for k,v in getattr(self._parser.typedef, 'inline_names', {}).items()))
-        except KeyError:
+        except AttributeError:
             _set(self, '_embedded_indices', {})
     def _unpack(self, data):
         '''
@@ -116,7 +116,7 @@ class NamedStruct(object):
         Create sub-classed struct from extra data, with specified parser. For parser internal use.
         :param parser: 
         '''
-        _set(self, '_sub', parser.create(getattr(self, '_extra', b''), self._target))
+        _set(self, '_sub', parser._create(getattr(self, '_extra', b''), self._target))
         try:
             object.__delattr__(self, '_extra')
         except:
@@ -252,7 +252,10 @@ class EmbeddedStruct(NamedStruct):
         '''
         Create indices for all the embedded structs. For parser internal use.
         '''
-        self._target._embedded_indices.update(((k,(self,v)) for k,v in getattr(self._parser, 'inline_names', {}).items()))
+        try:
+            self._target._embedded_indices.update(((k,(self,v)) for k,v in getattr(self._parser.typedef, 'inline_names', {}).items()))
+        except AttributeError:
+            pass
     def __getattr__(self, name):
         '''
         Get attribute value from NamedStruct.
@@ -552,6 +555,10 @@ class Parser(object):
         Internal interface for new.
         '''
         raise NotImplementedError
+    def _create(self, data, inlineparent = None):
+        c = _create_struct(self, inlineparent)
+        c._unpack(data)
+        return c
     def create(self, data, inlineparent = None):
         '''
         Create a struct and use all bytes of data. Different from parse(), this takes all data,
@@ -561,8 +568,9 @@ class Parser(object):
         :param inlineparent: if specified, this struct is embedded in another struct "inlineparent"
         :returns: a created NamedStruct object.
         '''
-        c = _create_struct(self, inlineparent)
-        c._unpack(data)
+        if self.base is not None:
+            return self.base.create(data, inlineparent)
+        c = self._create(data, inlineparent)
         self.subclass(c)
         return c
     def paddingsize(self, namedstruct):
@@ -1149,40 +1157,29 @@ class typedef(object):
         Create a new object of this type. It is also available as __call__, so you can create a new object
         just like creating a class instance: a = mytype(a=1,b=2)
         
-        :param args,kwargs: extra key-value arguments, each one will be set on the new object, to set value
-                       to the fields conveniently. If the key is a struct type name prepended by '_',
-                       the corresponded value should be a struct type based on the type with name in the key,
-                       and the embedded struct will be created with that type instead of the default type.
-                       It is similar to call _replace_embedded_type on the created struct.
-                       Both the "directly" embedded struct and the embedded struct inside another
-                       embedded struct can be set.
+        :param args: Replace the embedded struct type. Each argument is a tuple (name, newtype).
+                     It is equivalent to call _replace_embedded_type with *name* and *newtype*
+                     one by one. Both the "directly" embedded struct and the embedded struct inside another
+                     embedded struct can be set. If you want to replace an embedded struct in a
+                     replaced struct type, make sure the outer struct is replaced first. The embeded
+                     struct type must have a *name* to be replaced by specify *name* option.
                        
-                       *args* are tuples which contains key-value pairs. They are similar to kwargs,
-                       but the order is preserved, so you can first replace an embedded struct, then
-                       replace another embedded struct inside the replaced struct.
+        :param kwargs: extra key-value arguments, each one will be set on the new object, to set value
+                       to the fields conveniently.
         
         :returns: a new object, with the specified "kwargs" set.
         '''
         obj = self.parser().new()
         for k,v in args:
-            if k[:1] == '_':
-                t,i = obj._embedded_indices[k[:1]]
-                t._seqs[i] = v.parser().new(obj)
-            else:
-                setattr(obj, k, v)
+            obj._replace_embedded_type(k,v)
         for k,v in kwargs.items():
-            if k[:1] == '_':
-                t,i = obj._embedded_indices[k[1:]]
-                t._seqs[i] = v.parser().new(obj)
-        for k,v in kwargs.items():
-            if k[:1] != '_':
-                setattr(obj, k, v)
+            setattr(obj, k, v)
         return obj
-    def __call__(self, **kwargs):
+    def __call__(self, *args, **kwargs):
         '''
         Same as new()
         '''
-        return self.new(**kwargs)
+        return self.new(*args, **kwargs)
     def tobytes(self, obj):
         '''
         Convert the object to packed bytes. If the object is a NamedStruct, it is usually obj._tobytes();
