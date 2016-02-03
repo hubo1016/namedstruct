@@ -84,11 +84,24 @@ class NamedStruct(object):
             current = getattr(current, '_sub', None)
         ps.append(getattr(last, '_extra', b''))
         return b''.join(ps)
-    def _tobytes(self, *args, **kwargs):
+    def _prepack(self):
+        '''
+        Prepack stage. For parser internal use.
+        '''
+        current = self
+        while current is not None:
+            current._parser.prepack(current)
+            current = getattr(current, '_sub', None)        
+    def _tobytes(self, skipprepack = False):
         '''
         Convert the struct to bytes. This is the standard way to convert a NamedStruct to bytes.
+        
+        :param skipprepack: if True, the prepack stage is skipped. For parser internal use.
+        
         :returns: converted bytes
         '''
+        if not skipprepack:
+            self._prepack()
         data = self._pack()
         paddingSize = self._parser.paddingsize2(len(data))
         return data + b'\x00' * (paddingSize - len(data))
@@ -455,18 +468,28 @@ class Parser(object):
     Call interfaces of the typedef instead.
     '''
     logger = logging.getLogger(__name__ + '.Parser')
-    def __init__(self, base = None, criteria = _never, padding = 8, initfunc = None, typedef = None, classifier = None, classifyby = None):
+    def __init__(self, base = None, criteria = _never, padding = 8, initfunc = None, typedef = None, classifier = None, classifyby = None,
+                 prepackfunc = None):
         '''
         Parser base class initializer.
+        
         :param base: if specified, this parser sub-classes an existing type.
+        
         :param criteria: sub-classing criteria. If matched, the base class can be sub-classed into this type.
+        
         :param padding: padding this struct to align to padding-bytes boundaries. Specify 1 for no alignment.
+        
         :param initfunc: initializer of the struct type when a new instance is created.
+        
         :param typedef: the type definition of this parser.
+        
         :param classifier: if specified, a special value is calculated on this struct, and the sub-class type is
                 determined by this value, instead of using "criteria". This is defined on the base class.
+                
         :param classifyby: if specified and the base class has a "classifier", when the calucated "classify" value
                 is in classifyby, the base class can be sub-classed into this type.
+                
+        :param prepack: function executed before packing
         '''
         self.subclasses = []
         self.subindices = {}
@@ -476,6 +499,7 @@ class Parser(object):
         self.initfunc = initfunc
         self.typedef = typedef
         self.classifier = classifier
+        self.prepackfunc = prepackfunc
         if self.base is not None:
             self.base.subclasses.append(self)
             if classifyby is not None:
@@ -586,13 +610,23 @@ class Parser(object):
         Return a padded size from realsize, for NamedStruct internal use.
         '''
         return (realsize + self.padding - 1) // self.padding * self.padding
-    def tobytes(self, namedstruct):
+    def tobytes(self, namedstruct, skipprepack = False):
         '''
         Convert a NamedStruct to packed bytes.
+        
         :param namedstruct: a NamedStruct object of this type to pack.
+        
+        :param skipprepack: if True, the prepack stage is skipped.
+        
+        :returns: packed bytes
         '''
-        return namedstruct._tobytes()
-
+        return namedstruct._tobytes(skipprepack)
+    def prepack(self, namedstruct):
+        '''
+        Run prepack
+        '''
+        if self.prepackfunc is not None:
+            self.prepackfunc(namedstruct)
 
 class FormatParser(Parser):
     '''
@@ -618,12 +652,11 @@ class FormatParser(Parser):
         :param classifier: see Parser.__init__
         :param classifyby: see Parser.__init__
         '''
-        Parser.__init__(self, base, criteria, padding, initfunc, typedef, classifier, classifyby)
+        Parser.__init__(self, base, criteria, padding, initfunc, typedef, classifier, classifyby, prepackfunc)
         self.struct = struct.Struct(endian + fmt)
         self.properties = properties
         self.emptydata = b'\x00' * self.struct.size
         self.sizefunc = sizefunc
-        self.prepackfunc = prepackfunc
     def _parse(self, buffer, inlineparent = None):
         if len(buffer) < self.struct.size:
             return None
@@ -689,8 +722,6 @@ class FormatParser(Parser):
         :param namedstruct: a NamedStruct of this type.
         :returns: packed bytes, only contains fields of definitions in this type, not the sub type and "extra" data.
         '''
-        if self.prepackfunc is not None:
-            self.prepackfunc(namedstruct)
         elements = []
         t = namedstruct._target
         for p in self.properties:
@@ -725,10 +756,9 @@ class SequencedParser(Parser):
         :param classifier: see Parser.__init__
         :param classifyby: see Parser.__init__
         '''
-        Parser.__init__(self, base, criteria, padding, initfunc, typedef, classifier, classifyby)
+        Parser.__init__(self, base, criteria, padding, initfunc, typedef, classifier, classifyby, prepackfunc)
         self.parserseq = parserseq
         self.sizefunc = sizefunc
-        self.prepackfunc = prepackfunc
         if lastextra:
             self.parserseq = parserseq[0:-1]
             self.extra = parserseq[-1]
@@ -809,8 +839,6 @@ class SequencedParser(Parser):
         packdata = []
         s = namedstruct
         inlineparent = s._target
-        if self.prepackfunc is not None:
-            self.prepackfunc(s)
         seqiter = iter(s._seqs)
         for p, name in self.parserseq:
             if name is not None and len(name) > 1:
@@ -824,9 +852,10 @@ class SequencedParser(Parser):
             else:
                 if name is not None:
                     v = getattr(inlineparent, name[0])
+                    packdata.append(p.tobytes(v))
                 else:
                     v = next(seqiter)
-                packdata.append(p.tobytes(v))
+                    packdata.append(p.tobytes(v, True))
         if hasattr(self, 'extra'):
             p, name = self.extra
             if name is not None and len(name) > 1:
@@ -836,9 +865,10 @@ class SequencedParser(Parser):
             else:
                 if name is None:
                     v = next(seqiter)
+                    packdata.append(p.tobytes(v, True))
                 else:
                     v = getattr(inlineparent, name[0])
-                packdata.append(p.tobytes(v))
+                    packdata.append(p.tobytes(v))
         return b''.join(packdata)
     def _new(self, inlineparent = None):
         s = _create_struct(self, inlineparent)
@@ -902,6 +932,11 @@ class SequencedParser(Parser):
                     v = getattr(inlineparent, name[0])
                 size += p.paddingsize(v)
         return size
+    def prepack(self, namedstruct):
+        for s in namedstruct._seqs:
+            if hasattr(s, '_prepack'):
+                s._prepack()
+        Parser.prepack(self, namedstruct)
 
 class PrimitiveParser(object):
     '''
@@ -952,7 +987,7 @@ class PrimitiveParser(object):
         Compatible to Parser.paddingsize()
         '''
         return self.struct.size
-    def tobytes(self, prim):
+    def tobytes(self, prim, skipprepack = False):
         '''
         Compatible to Parser.tobytes()
         '''
@@ -1030,7 +1065,7 @@ class ArrayParser(object):
         Compatible to Parser.paddingsize()
         '''
         return self.sizeof(prim)
-    def tobytes(self, prim):
+    def tobytes(self, prim, skipprepack = False):
         '''
         Compatible to Parser.tobytes()
         '''
@@ -1084,7 +1119,7 @@ class RawParser(object):
         Compatible to Parser.paddingsize()
         '''
         return len(prim)
-    def tobytes(self, prim):
+    def tobytes(self, prim, skipprepack = False):
         '''
         Compatible to Parser.tobytes()
         '''
@@ -1116,7 +1151,7 @@ class CstrParser(object):
         return len(prim) + 1
     def paddingsize(self, prim):
         return self.sizeof(prim)
-    def tobytes(self, prim):
+    def tobytes(self, prim, skipprepack = False):
         return prim + b'\x00'
 
 class typedef(object):
@@ -1401,7 +1436,7 @@ class fixedstruct(typedef):
         else:
             paddingformat = self.format
         if inlineself is None:
-            if self.base is None and self.sizefunc is None and self.prepackfunc is None and self.initfunc is None and len(self.properties) <= 5:
+            if self.base is None and self.sizefunc is None and self.prepackfunc is None and self.initfunc is None:
                 self._inline = (paddingformat, self.properties)
             else:
                 self._inline = None
@@ -1447,7 +1482,7 @@ class nstruct(typedef):
             struct mystruct3;
         } mystruct;
     
-    A struct is in big-endian (network order) by default. If you need a little-endian struct, specify *endian*
+    **A struct is in big-endian (network order) by default.** If you need a little-endian struct, specify *endian*
     option to '<' and use little-endian version of types at the same time::
 
         mystruct_le = nstruct((uint32_le, 'a'),
@@ -1469,7 +1504,7 @@ class nstruct(typedef):
     
     - Anonymous array is not allowed.
     
-    Structs are aligned to 8-bytes (*padding*=8) boundaries by default, so if a struct defines fields of only 5 bytes,
+    **Structs are aligned to 8-bytes (*padding* = 8) boundaries by default**, so if a struct defines fields of only 5 bytes,
     3 extra padding bytes are appended to the struct automatically. The struct is always padded to make
     the size multiplies of "padding" even if it contains complex sub-structs or arrays, so it is more
     convenient than adding padding bytes to definitions. For example, if a struct contains a variable array
@@ -1478,7 +1513,7 @@ class nstruct(typedef):
     Specify 4 for 4-bytes (32-bit) alignment, 2 for 2-bytes (16-bit), etc. Specify 1 for 1-bytes alignment, 
     which equals to disable alignment.
     
-    Structs can hold more bytes than the size of defined fields. A struct created with create() takes all
+    **Structs can hold more bytes than the size of defined fields.** A struct created with create() takes all
     the input bytes as part of the struct. The extra bytes are used in variable length data types, or stored
     as "extra" data to serve automatic sub-class.
     
@@ -1536,7 +1571,7 @@ class nstruct(typedef):
                         size = lambda x: x.length,
                         prepack = packrealsize('length'))
     
-    The extra data can be used in sub-class. A sub-classed struct is a struct begins with the base struct, and
+    **The extra data can be used in sub-class.** A sub-classed struct is a struct begins with the base struct, and
     use the "extra" data of the base struct as the data of the extended fields. It works like the C++ class
     derive::
     
@@ -1581,7 +1616,7 @@ class nstruct(typedef):
     *classifier* matches any value in *classifyby*, the base class is sub-classed to that type. The procedure
     is O(1).
     
-    The size of a sub-classed type is determined by the base type. If the base type has no "extra" bytes, it
+    **The size of a sub-classed type is determined by the base type.** If the base type has no "extra" bytes, it
     cannot be sub-classed. If the base type does not have a *size* option, it is not possible to parse the
     struct and sub-class it from a bytes stream. But it is still possible to use create() to create the struct
     and automatically sub-class it. It is useless to set *size* option on a struct type with base type, though
@@ -2264,8 +2299,8 @@ class OptionalParser(Parser):
     '''
     Parser for *optional* type
     '''
-    def __init__(self, basetypeparser, name, criteria, typedef):
-        Parser.__init__(self, padding = 1, typedef=typedef)
+    def __init__(self, basetypeparser, name, criteria, typedef, prepackfunc = None):
+        Parser.__init__(self, padding = 1, typedef=typedef, prepackfunc=prepackfunc)
         self.basetypeparser = basetypeparser
         self.name = name
         self.criteria = criteria
@@ -2323,17 +2358,33 @@ class optional(typedef):
     
     - A optional type is placed in an anonymous field. In fact it creates an embedded struct with only
       one (optional) field.
+      
     - The criteria can only use fields that are defined before the optional field because the other fields
       are not yet parsed.
+      
     - Usually you should specify a *prepack* function to pack some identifier into the struct to identify
       that the optional field appears.
+      
     - The optional field does not exists when the struct is created with new(). Simply set a value to the
       attribute to create the optional field: myopt(data = 7, extra = 12)
+      
     - The optional type is a variable length type if and only if the *basetype* is a variable length type
     '''
-    def __init__(self, basetype, name, criteria):
+    def __init__(self, basetype, name, criteria, prepackfunc = None):
+        '''
+        Initializer.
+        
+        :param basetype: the optional field type
+        
+        :param name: the name of the optional field
+        
+        :param criteria: a function to determine whether the optional field should be parsed.
+        
+        :param prepackfunc: function to execute before pack, like in nstruct
+        '''
         self.basetype = basetype
         self.criteria = criteria
+        self.prepackfunc = prepackfunc
         if name is None:
             raise ParseError('Optional member cannot be in-line member')
         self.name = name
@@ -2345,10 +2396,11 @@ class optional(typedef):
                 self._listformatter = t.formatter
         if hasattr(basetype, 'formatter'):
             self._formatter = basetype.formatter
+        
     def array(self, size):
         raise TypeError('optional type cannot form array')
     def _compile(self):
-        return OptionalParser(self.basetype.parser(), self.name, self.criteria, self)
+        return OptionalParser(self.basetype.parser(), self.name, self.criteria, self, self.prepackfunc)
     def isextra(self):
         return self.basetype.isextra()
     def __repr__(self, *args, **kwargs):
@@ -2373,8 +2425,8 @@ class DArrayParser(Parser):
     '''
     Parser for *darray*
     '''
-    def __init__(self, innertypeparser, name, size, typedef, padding = 1):
-        Parser.__init__(self, padding = padding, typedef=typedef)
+    def __init__(self, innertypeparser, name, size, typedef, padding = 1, prepackfunc = None):
+        Parser.__init__(self, padding = padding, typedef=typedef, prepackfunc=prepackfunc)
         self.innertypeparser = innertypeparser
         self.name = name
         self.size = size
@@ -2444,13 +2496,19 @@ class darray(typedef):
     - You can use *extend* with an array type (mystruct2[0]) to override the formatting of inner types or the
       whole array
     '''
-    def __init__(self, innertype, name, size, padding = 1):
+    def __init__(self, innertype, name, size, padding = 1, prepack = None):
         '''
         Initializer.
+        
         :param innertype: type of array element
+        
         :param name: field name
+        
         :param size: a function to calculate the array length
-        :param padding: align the array to *padding*-bytes boundary
+        
+        :param padding: align the array to padding-bytes boundary, like in nstruct
+        
+        :param prepack: prepack function, like in nstruct
         '''
         self.innertype = innertype
         self.size = size
@@ -2458,10 +2516,11 @@ class darray(typedef):
             raise ParseError('Dynamic array member cannot be in-line member')
         self.name = name
         self.padding = padding
+        self.prepackfunc = prepack
     def array(self, size):
         raise TypeError('Dynamic array type cannot form array')
     def _compile(self):
-        return DArrayParser(self.innertype.parser(), self.name, self.size, self, self.padding)
+        return DArrayParser(self.innertype.parser(), self.name, self.size, self, self.padding, self.prepackfunc)
     def isextra(self):
         return False
     def __repr__(self, *args, **kwargs):
@@ -2485,8 +2544,8 @@ class BitfieldParser(Parser):
     '''
     Parser for *bitfield*
     '''
-    def __init__(self, basetypeparser, fields, init, typedef):
-        Parser.__init__(self, padding = 1, initfunc = init, typedef=typedef)
+    def __init__(self, basetypeparser, fields, init, typedef, prepackfunc = None):
+        Parser.__init__(self, padding = 1, initfunc = init, typedef=typedef, prepackfunc=prepackfunc)
         self.basetypeparser = basetypeparser
         self.fields = fields
     def _parseinner(self, data, s, create = False):
@@ -2557,7 +2616,7 @@ class bitfield(typedef):
                         (19, 'third'),    # Can cross byte border
                         (1, 'array', 20), # A array of 20 1-bit numbers
                         name = 'mybit',
-                        init = packvalue('second', 2),
+                        init = packvalue(2, 'second'),
                         extend = {'first': myenum, 'array': myenum2[20]})
     '''
     def __init__(self, basetype, *properties, **arguments):
@@ -2583,8 +2642,11 @@ class bitfield(typedef):
                             
                         formatter
                             similar to *formatter* option in nstruct
+                        
+                        prepack
+                            similar to *prepack* option in nstruct
         '''
-        params = ['name', 'init', 'extend', 'formatter']
+        params = ['name', 'init', 'extend', 'formatter', 'prepack']
         for k in arguments:
             if not k in params:
                 warnings.warn(StructDefWarning('Parameter %r is not recognized, is there a spelling error?' % (k,)))
@@ -2592,6 +2654,7 @@ class bitfield(typedef):
         self.properties = properties
         self.readablename = arguments.get('name')
         self.initfunc = arguments.get('init')
+        self.prepackfunc = arguments.get('prepack')
         fields = []
         start = 0
         for p in properties:
@@ -2630,7 +2693,7 @@ class bitfield(typedef):
         if 'formatter' in arguments:
             self.extraformatter = arguments['formatter']
     def _compile(self):
-        return BitfieldParser(self.basetype.parser(), self.fields, self.initfunc, self)
+        return BitfieldParser(self.basetype.parser(), self.fields, self.initfunc, self, self.prepackfunc)
     def isextra(self):
         return self.basetype.isextra()
     def __repr__(self, *args, **kwargs):
