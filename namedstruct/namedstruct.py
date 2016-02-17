@@ -45,9 +45,12 @@ class NamedStruct(object):
         '''
         Constructor. Usually a NamedStruct is constructed automatically by a parser, you should not call
         the initializer yourself.
+        
         :param parser: parser to pack/unpack the struct
+        
         :param inlineparent: if not None, this struct is embedded into another struct. An embedded struct
                 acts like an agent to inlineparent - attributes are read from and stored into inlineparent.
+        
         '''
         _set(self, '_parser', parser)
         _set(self, '_target', self)
@@ -73,7 +76,9 @@ class NamedStruct(object):
     def _pack(self):
         '''
         Pack current struct into bytes. For parser internal use.
+        
         :returns: packed bytes
+        
         '''
         #self._logger.log(logging.DEBUG, 'packing %r', self)
         ps = []
@@ -108,7 +113,9 @@ class NamedStruct(object):
     def _realsize(self):
         '''
         Get the struct size without padding (or the "real size")
+        
         :returns: the "real size" in bytes
+        
         '''
         current = self
         size= 0
@@ -121,13 +128,16 @@ class NamedStruct(object):
     def __len__(self):
         '''
         Get the struct size with padding. Usually this aligns a struct into 4-bytes or 8-bytes boundary.
+        
         :returns: padded size of struct in bytes
+        
         '''
         return self._parser.paddingsize(self)
     def _subclass(self, parser):
         '''
         Create sub-classed struct from extra data, with specified parser. For parser internal use.
-        :param parser: 
+        
+        :param parser: parser of subclass 
         '''
         _set(self, '_sub', parser._create(getattr(self, '_extra', b''), self._target))
         try:
@@ -155,7 +165,9 @@ class NamedStruct(object):
     def _gettype(self):
         '''
         Return current type of this struct
+        
         :returns: a typedef object (e.g. nstruct)
+        
         '''
         current = self
         lastname = getattr(current._parser, 'typedef', None)
@@ -185,9 +197,11 @@ class NamedStruct(object):
     def _validate(self, recursive = True):
         '''
         **DEPRECATED** structs are always unpacked now. _validate do nothing.
+        
         Force a unpack on this struct to check if there are any format errors. Sometimes a struct is not
         unpacked until attributes are read from it, if there are format errors in the original data, a
         BadFormatError is raised. Call _validate to ensure that the struct is fully well-formatted.
+        
         :param recursive: if True (default), also validate all sub-fields.
         '''
         pass
@@ -315,10 +329,16 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT):
     :param dumpextra: if True, dump "extra" data in '_extra' field. False (default) to ignore them.
     
     :param typeinfo: Add struct type information in the dump result. May be the following values:
-      - DUMPTYPE_FLAT ('flat'), add a field '_type' for the type information (default)
-      - DUMPTYPE_KEY ('key'), convert the value to dictionary like: {'<struc_type>': value}
-      - DUMPTYPE_NONE ('none'), do not add type information
+    
+      DUMPTYPE_FLAT ('flat')
+        add a field '_type' for the type information (default)
       
+      DUMPTYPE_KEY ('key')
+        convert the value to dictionary like: {'<struc_type>': value}
+      
+      DUMPTYPE_NONE ('none')
+        do not add type information
+    
     :returns: "dump" format of val, suitable for JSON-encode or print.
     '''
     if val is None:
@@ -345,10 +365,16 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT):
         if dumpextra:
             extra = val._getextra()
             if extra:
-                r['_extra'] = extra
+                try:
+                    r['_extra'] = extra
+                except:
+                    pass
         if t is not None:
             if typeinfo == DUMPTYPE_FLAT:
-                r['_type'] = '<' + repr(t) + '>'
+                try:
+                    r['_type'] = '<' + repr(t) + '>'
+                except:
+                    pass
             elif typeinfo == DUMPTYPE_KEY:
                 r = {'<' + repr(t) + '>' : r}
         return r
@@ -377,8 +403,10 @@ def sizefromlen(limit, *properties):
     
     :param limit: the maximum size limit, if the acquired value if larger then the limit, BadLenError is raised
             to protect against serious result like memory overflow or dead loop.
-    :param *properties: the name of the specified fields. Specify more than one string to form a property path,
+            
+    :param properties: the name of the specified fields. Specify more than one string to form a property path,
             like: sizefromlen(256, 'header', 'length') -> s.header.length
+            
     :returns: a function which takes a NamedStruct as parameter, and returns the length value from specified
             property path.
     '''
@@ -396,8 +424,11 @@ def packsize(*properties):
     Revert to sizefromlen, store the struct size (len(struct)) to specified property path. The size includes
     padding. To store the size without padding, use packrealsize() instead. Often used in nstruct "prepack"
     parameter.
-    :param *properties: specified field name, same as sizefromlen.
+    
+    :param properties: specified field name, same as sizefromlen.
+    
     :returns: a function which takes a NamedStruct as parameter, and pack the size to specified field.
+    
     '''
     def func(namedstruct):
         v = namedstruct._target
@@ -410,8 +441,11 @@ def packrealsize(*properties):
     '''
     Revert to sizefromlen, pack the struct real size (struct._realsize()) to specified property path.
     Unlike packsize, the size without padding is stored. Often used in nstruct "prepack" parameter.
-    :param *properties: specified field name, same as sizefromlen.
+    
+    :param properties: specified field name, same as sizefromlen.
+    
     :returns: a function which takes a NamedStruct as parameter, and pack the size to specified field.
+    
     '''
     def func(namedstruct):
         v = namedstruct._target
@@ -423,9 +457,13 @@ def packrealsize(*properties):
 def packvalue(value, *properties):
     '''
     Store a specified value to specified property path. Often used in nstruct "init" parameter.
+    
     :param value: a fixed value
-    :param *properties: specified field name, same as sizefromlen.
+    
+    :param properties: specified field name, same as sizefromlen.
+    
     :returns: a function which takes a NamedStruct as parameter, and store the value to property path.
+    
     '''
     def func(namedstruct):
         v = namedstruct._target
@@ -437,8 +475,11 @@ def packvalue(value, *properties):
 def packexpr(func, *properties):
     '''
     Store a evaluated value to specified property path. Often used in nstruct "prepack" parameter.
+    
     :param func: a function which takes a NamedStruct as parameter and returns a value, often a lambda expression
-    :param *properties: specified field name, same as sizefromlen.
+    
+    :param properties: specified field name, same as sizefromlen.
+    
     :returns: a function which takes a NamedStruct as parameter, and store the return value of func to property path.
     '''
     def func2(namedstruct):

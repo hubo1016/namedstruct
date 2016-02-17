@@ -147,9 +147,9 @@ return that value to let the struct parses correctly::
     """
     
     """
-    >>> my_unsize_struct(data = b'abcde')._tobytes()
+    >>> my_size_struct(data = b'abcde')._tobytes()
     b'\x00\x07abcde'
-    >>> my_unsize_struct.parse(b'\x00\x07abcde')[0].data
+    >>> my_size_struct.parse(b'\x00\x07abcde')[0].data
     b'abcde'
     """
 
@@ -274,9 +274,9 @@ See :py:class:`namedstruct.nstruct` for all valid options.
 
 .. _extensible:
 
-----------------------
-Extend defined structs
-----------------------
+-------------------------------
+Extend(inherit) defined structs
+-------------------------------
 
 With *size* option, a struct can have more data than the defined fields on parsing. Also it is possible
 to let a struct use more data with :py:func:`namedstruct.typedef.create`. Besides using the data for
