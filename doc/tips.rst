@@ -104,6 +104,7 @@ An embedded struct can also be extended (inherited) (a simplied version of ARP p
                                     (12, 'tag')),),
                             (uint16, 'ethertype2'),
                             base = ether_l2,
+                            name = 'ether_l2_8021q',
                             criteria = lambda x: x.ethertype == 0x8100,
                             init = packvalue(0x8100, 'ethertype'))
    
@@ -166,9 +167,9 @@ An embedded struct can also be extended (inherited) (a simplied version of ARP p
    
    # Parse a packet without VLAN tag
    >>> dump(ether_l3.create(b'\x00\xff\x1a\x1b\x1c\x1d\x00\xff\n\x0b\x0c\r\x08\x06\x00\x06\x00\x04\x00\xff\n\x0b\x0c\r\xc0\xa8\x01\x02\x00\xff\x1a\x1b\x1c\x1d\xc0\xa8\x01\x03'))
-   {'dmac': '00:FF:1A:1B:1C:1D', '_type': '<ether_l3_arp>', 'nw_length': 4, 'nw_dst': '\xc0\xa8\x01\x03', 'ethertype': 2054, 'smac': '00:FF:0A:0B:0C:0D', 'hw_src': '\x00\xff\n\x0b\x0c\r', 'nw_src': '\xc0\xa8\x01\x02', 'hw_dst': '\x00\xff\x1a\x1b\x1c\x1d', 'hw_length': 6}   """
+   {'dmac': '00:FF:1A:1B:1C:1D', '_type': '<ether_l3_arp>', 'nw_length': 4, 'nw_dst': '\xc0\xa8\x01\x03', 'ethertype': 2054, 'smac': '00:FF:0A:0B:0C:0D', 'hw_src': '\x00\xff\n\x0b\x0c\r', 'nw_src': '\xc0\xa8\x01\x02', 'hw_dst': '\x00\xff\x1a\x1b\x1c\x1d', 'hw_length': 6}
    
    # Parse a packet with VLAN tag
    >>> dump(ether_l3.create(b'\x00\xff\x1a\x1b\x1c\x1d\x00\xff\n\x0b\x0c\r\x81\x00\x00d\x08\x06\x00\x06\x00\x04\x00\xff\n\x0b\x0c\r\xc0\xa8\x01\x02\x00\xff\x1a\x1b\x1c\x1d\xc0\xa8\x01\x03'))
-   {'dmac': '00:FF:1A:1B:1C:1D', '_type': '<ether_l3_arp>', 'nw_length': 4, 'nw_dst': '\xc0\xa8\x01\x03', 'ethertype': 33024, 'cfi': 0, 'pri': 0, 'smac': '00:FF:0A:0B:0C:0D', 'hw_src': '\x00\xff\n\x0b\x0c\r', 'tag': 100, 'ethertype2': 2054, 'nw_src': '\xc0\xa8\x01\x02', 'hw_dst': '\x00\xff\x1a\x1b\x1c\x1d', 'hw_length': 6}   
+   {'dmac': '00:FF:1A:1B:1C:1D', '_type': '<ether_l3_arp>', 'nw_length': 4, 'nw_dst': '\xc0\xa8\x01\x03', 'ethertype': 33024, 'cfi': 0, 'pri': 0, 'smac': '00:FF:0A:0B:0C:0D', 'hw_src': '\x00\xff\n\x0b\x0c\r', 'tag': 100, 'ethertype2': 2054, 'nw_src': '\xc0\xa8\x01\x02', 'hw_dst': '\x00\xff\x1a\x1b\x1c\x1d', 'hw_length': 6}
    """
