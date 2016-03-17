@@ -243,9 +243,14 @@ class NamedStruct(object):
             raise ValueError('State should be a tuple')
         t = state[1]
         if t in NamedStruct._pickleTypes:
-            NamedStruct.__init__(self, NamedStruct._pickleTypes[t].parser(), state[0], state[2])
+            parser = NamedStruct._pickleTypes[t].parser()
         else:
-            NamedStruct.__init__(self, t, state[0], state[2])
+            parser = t
+        if state[2] is not self:
+            type(self).__init__(self, parser, state[2])
+        else:
+            type(self).__init__(self, parser)
+        self._unpack(state[0])
         if hasattr(self._parser, 'subclass'):
             self._parser.subclass(self)
     def _replace_embedded_type(self, name, newtype):
@@ -497,7 +502,7 @@ class InlineStruct(object):
     def __init__(self, parent):
         self._parent = parent
     def __repr__(self, *args, **kwargs):
-        return repr(dict((k,v) for k,v in self.__dict__ if k[:1] != '_'))
+        return repr(dict((k,v) for k,v in self.__dict__.items() if k[:1] != '_'))
 
 
 def _never(namedstruct):
