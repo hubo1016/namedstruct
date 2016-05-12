@@ -267,6 +267,20 @@ class NamedStruct(object):
             name = name.readablename
         t,i = self._target._embedded_indices[name]
         t._seqs[i] = newtype.parser().new(self._target)
+    def _get_embedded(self, name):
+        '''
+        Return an embedded struct object to calculate the size or use _tobytes(True) to convert just the
+        embedded parts.
+        
+        :param name: either the original type, or the name of the original type. It is always the type
+                     used in type definitions, even if it is already replaced once or more.
+        
+        :returns: an embedded struct
+        '''
+        if hasattr(name, 'readablename'):
+            name = name.readablename
+        t,i = self._target._embedded_indices[name]
+        return t._seqs[i]        
     @staticmethod
     def _registerPickleType(name, typedef):
         '''

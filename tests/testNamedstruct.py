@@ -131,7 +131,22 @@ class Test(unittest.TestCase):
         b = s._tobytes()
         self.assertEqual(b, b'\x01\x03\x00\x02\x00\x06')
         self.assertEqual(dump(s7.create(b), False), dump(s, False))
-
+        # _get_embedded
+        s = s7()
+        b = s._get_embedded(s1)._tobytes()
+        self.assertEqual(b, b'')
+        s = s7((s1, s2), a = 3)
+        b = s._get_embedded(s1)._tobytes()
+        self.assertEqual(b, b'\x00\x03')
+        b = s._get_embedded(s1)._tobytes(True)
+        self.assertEqual(b, b'\x00\x03')
+        s = s7((s6,s8), (s1,s2), a = 2, b = 6)
+        b = s._get_embedded(s1)._tobytes()
+        self.assertEqual(b, b'\x00\x02')
+        b = s._get_embedded(s1)._tobytes(True)
+        self.assertEqual(b, b'\x00\x02')
+        
+        
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']
     unittest.main()
