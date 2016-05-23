@@ -439,6 +439,86 @@ tcp_flags = enum('tcp_flags', globals(), uint8, True,
 def _pack_tcp_header_size(x):
     x.data_offset = ((len(x) // 4) << 4)
 
+tcp_option_kind = enum('tcp_option_kind', globals(), uint8,
+                       TCPOPT_EOL = 0,
+                       TCPOPT_NOP = 1,
+                       TCPOPT_MAXSEG = 2,
+                       TCPOPT_WINDOW = 3,
+                       TCPOPT_SACK_PERMITTED = 4,
+                       TCPOPT_SACK = 5,
+                       TCPOPT_TIMESTAMP = 8
+                       )
+
+_tcp_option_header = nstruct((tcp_option_kind, 'kind'),
+                            name = "tcp_option_header",
+                            padding = 1,
+                            size = lambda x: 1 if (x.kind == TCPOPT_EOL or x.kind == TCPOPT_NOP) else 2
+                            )
+
+_tcp_option_header_length = nstruct((uint8, 'length'),
+                                    name = "tcp_option_header_length",
+                                    base = _tcp_option_header,
+                                    criteria = lambda x: x.kind != TCPOPT_EOL and x.kind != TCPOPT_NOP
+                                    )
+
+def _prepack_tcp_option(x):
+    s = x._realsize()
+    if s > 1:
+        x.length = s
+
+tcp_option = nstruct((_tcp_option_header,),
+                     name = "tcp_option",
+                     padding = 1,
+                     size = lambda x: 1 if (x.kind == TCPOPT_EOL or x.kind == TCP_OPT_NOP) else x.length,
+                     prepack = _prepack_tcp_option
+                     )
+
+def _init_tcp_option(kind):
+    def _init_func(x):
+        x._replace_embedded_type(_tcp_option_header, _tcp_option_header_length)
+        x.kind = kind
+    return _init_func
+
+tcp_option_maxseg = nstruct((uint16, 'mss'),
+                            base = tcp_option,
+                            criteria = lambda x: x.kind == TCPOPT_MAXSEG,
+                            init = _init_tcp_option(TCPOPT_MAXSEG)
+                            )
+
+tcp_option_window = nstruct((uint8, 'shift_cnt'),
+                            base = tcp_option,
+                            criteria = lambda x: x.kind == TCPOPT_WINDOW,
+                            init = _init_tcp_option(TCPOPT_WINDOW)
+                            )
+
+tcp_option_sack = nstruct((uint32[2][0], 'edges'),
+                          base = tcp_option,
+                          criteria = lambda x: x.kind == TCPOPT_SACK,
+                          init = _init_tcp_option(TCPOPT_SACK)
+                          )
+
+tcp_option_timestamp = nstruct((uint32, 'tsval'),
+                               (uint32, 'tsecr'),
+                               base = tcp_option,
+                               criteria = lambda x: x.kind == TCPOPT_TIMESTAMP,
+                               init = _init_tcp_option(TCPOPT_TIMESTAMP))
+
+def _format_tcp_options(x):
+    # Parse tcp options
+    options = tcp_option[0].create(x)
+    result = []
+    for o in options:
+        od = dump(o, dumpextra = True, typeinfo = DUMPTYPE_NONE)
+        for k,v in od.items():
+            if k not in ('kind', 'length') and not k.startswith('_'):
+                result.append(k + ': ' + repr(v))
+        if '_extra' in od:
+            result.append(str(od['kind']) + ': ' + repr(od['_extra']))
+    return ', '.join(result)
+
+_tcp_option_raw = rawtype()
+_tcp_option_raw.formatter = _format_tcp_options
+
 tcp_header = nstruct((tcp_header_min,),
                       (uint32, 'ack'),
                       (uint8, 'data_offset'),
@@ -446,11 +526,12 @@ tcp_header = nstruct((tcp_header_min,),
                       (uint16, 'tcp_win'),
                       (uint16, 'tcp_sum'),
                       (uint16, 'tcp_urp'),
-                      (raw, 'tcp_options'),
+                      (_tcp_option_raw, 'tcp_options'),
                       name = 'tcp_header',
                       padding = 4,
                       size = lambda x: (x.data_offset >> 4) * 4,
-                      prepack = _pack_tcp_header_size
+                      prepack = _pack_tcp_header_size,
+                      extend = {'tcp_options': _format_tcp_}
                       )
 
 tcp_payload = nstruct((tcp_header,),
@@ -522,7 +603,7 @@ tcp_bestparse_partial = nstruct((raw, 'otherpayload'),
                                 criteria = lambda x: x._realsize() < (x.data_offset >> 4) * 4
                                 )
 
-_tcp_bestparse_full_options = nstruct((raw, 'tcp_options'),
+_tcp_bestparse_full_options = nstruct((_tcp_option_raw, 'tcp_options'),
                                       name = "_tcp_bestparse_full_options",
                                       size = lambda x: max((x.data_offset >> 4) * 4 - 20, 0),
                                       padding = 4,

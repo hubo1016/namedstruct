@@ -719,6 +719,8 @@ class FormatParser(Parser):
         self.unpack(buffer[0:self.struct.size], s)
         if self.sizefunc is not None:
             size = self.sizefunc(s)
+            if size < self.struct.size:
+                raise BadFormatError('struct size should be greater than %d bytes, got %d' % (self.struct.size, size))
             if len(buffer) < size:
                 return None
             _set(s, '_extra', _copy(buffer[self.struct.size:size]))
@@ -858,6 +860,8 @@ class SequencedParser(Parser):
         else:
             if self.sizefunc is not None:
                 size = self.sizefunc(s)
+                if size < start:
+                    raise BadFormatError('struct size should be greater than %d bytes, got %d' % (start, size))
             else:
                 size = start
         if hasattr(self, 'extra'):
@@ -1067,7 +1071,7 @@ class ArrayParser(object):
         size = 0
         v = []
         for i in range(0, self.size):  # @UnusedVariable
-            r = self.innerparser.parse(buffer, None)
+            r = self.innerparser.parse(buffer[size:], None)
             if r is None:
                 return None
             v.append(r[0])
@@ -1095,7 +1099,7 @@ class ArrayParser(object):
             v = []
             start = 0
             while start < len(data):
-                r = self.innerparser.parse(data, None)
+                r = self.innerparser.parse(data[start:], None)
                 if r is None:
                     break
                 v.append(r[0])
