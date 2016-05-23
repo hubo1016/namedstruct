@@ -15,9 +15,24 @@ def _str(v):
     if isinstance(v, str):
         return v
     elif isinstance(v, bytes):
-        return v.decode('utf-8')
+        return v.decode('ascii')
     else:
         return str(v)
+
+def _str2(v):
+    if isinstance(v, str):
+        return v
+    elif isinstance(v, bytes):
+        if len(v) < 40:
+            try:
+                return v.decode('ascii')
+            except Exception:
+                return repr(v)
+        else:
+            return repr(v)
+    else:
+        return str(v)
+
 
 def _format_multilines(v, ljust_len):
     screen_width = max(80 - ljust_len, 16)
@@ -30,7 +45,7 @@ def _format_multilines(v, ljust_len):
 def format_table(x):
     ljust_len = (max(max(len(k) for k in x) + 2, 12) + 3) // 4 * 4
     for k,v in x.items():
-        print((k + ':').ljust(ljust_len), _format_multilines(_str(v), ljust_len))
+        print((k + ':').ljust(ljust_len), _format_multilines(_str2(v), ljust_len))
     print()
 
 def format_pprint(x):
@@ -72,7 +87,7 @@ defined_level = {2: (lambda x,l: ethernet.ethernet_l2.create(x[:l])),
 from namedstruct import dump
 
 def create_desp(pd):
-    return b', '.join(c + ': ' + _str(pd[c]) for c in defined_columns if c in pd)
+    return b', '.join(c + ': ' + _str2(pd[c]) for c in defined_columns if c in pd)
 
 def format_packet(pd, verbose):
     print(current_timestamp(), '{dl_src} > {dl_dst}, {dl_type}'.format(**pd), create_desp(pd))
