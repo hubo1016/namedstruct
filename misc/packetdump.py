@@ -21,15 +21,19 @@ def _str(v):
 
 def _str2(v):
     if isinstance(v, str):
-        return v
-    elif isinstance(v, bytes):
-        if len(v) < 40:
-            try:
-                return v.decode('ascii')
-            except Exception:
-                return repr(v)
-        else:
+        try:
+            v.decode('ascii')
+        except Exception:
             return repr(v)
+        else:
+            return v
+    elif isinstance(v, bytes):
+        try:
+            return v.decode('ascii')
+        except Exception:
+            return repr(v)
+        else:
+            return v
     else:
         return str(v)
 
