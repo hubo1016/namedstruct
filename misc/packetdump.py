@@ -10,6 +10,15 @@ import ethernet
 import sys
 import argparse
 
+
+def _str(v):
+    if isinstance(v, str):
+        return v
+    elif isinstance(v, bytes):
+        return v.decode('utf-8')
+    else:
+        return str(v)
+
 def _format_multilines(v, ljust_len):
     screen_width = max(80 - ljust_len, 16)
     lines = []
@@ -63,7 +72,7 @@ defined_level = {2: (lambda x,l: ethernet.ethernet_l2.create(x[:l])),
 from namedstruct import dump
 
 def create_desp(pd):
-    return b', '.join(c + ': ' + pd[c] for c in defined_columns if c in pd)
+    return b', '.join(c + ': ' + _str(pd[c]) for c in defined_columns if c in pd)
 
 def format_packet(pd, verbose):
     print(current_timestamp(), '{dl_src} > {dl_dst}, {dl_type}'.format(**pd), create_desp(pd))
@@ -82,14 +91,6 @@ def _contains(lv, rv):
         return lv & rv
     else:
         return rv in lv
-
-def _str(v):
-    if isinstance(v, str):
-        return v
-    elif isinstance(v, bytes):
-        return v.decode('utf-8')
-    else:
-        return str(v)
 
 predefined_compare = {'=': lambda a,b: a == b,
                       '!=': lambda a,b: a != b,
@@ -194,7 +195,7 @@ if __name__ == '__main__':
             level = 4
         parser = defined_level[level]
         if args.verbose:
-            verbose = predefined_formats.get(args.verbose, format_pprint)
+            verbose = predefined_formats.get(args.format, format_pprint)
         else:
             verbose = None
         length = args.length
@@ -225,4 +226,4 @@ if __name__ == '__main__':
     except (KeyboardInterrupt, SystemExit):
         print()
         print("%d/%d packet captured" % (filtered_packet, total_packet))
-        
+
