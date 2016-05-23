@@ -96,8 +96,8 @@ from namedstruct import dump
 def create_desp(pd):
     return b', '.join(c + ': ' + _str2(pd[c]) for c in defined_columns if c in pd)
 
-def format_packet(pd, verbose):
-    print(current_timestamp(), '{dl_src} > {dl_dst}, {dl_type}'.format(**pd), create_desp(pd))
+def format_packet(pd, verbose, addr):
+    print(current_timestamp(), '{0} - {dl_src} > {dl_dst}, {dl_type}'.format(*addr, **pd), create_desp(pd))
     if verbose:
         verbose(pd)
 
@@ -242,7 +242,7 @@ if __name__ == '__main__':
                     total_packet += 1
                     if all(f(pd) for f in filters):
                         filtered_packet += 1
-                        format_packet(pd, verbose)
+                        format_packet(pd, verbose, addr)
                 except Exception as exc:
                     print(str(exc), file=sys.stderr)
     except (KeyboardInterrupt, SystemExit):
