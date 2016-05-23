@@ -368,12 +368,7 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT):
             r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if not k[:1] != '_')
         else:
             if humanread:
-                r = t.formatdump(dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_'))
-                if hasattr(val, '_seqs'):
-                    for s in val._seqs:
-                        st = s._gettype()
-                        if st is not None and hasattr(st, 'formatdump'):
-                            r = st.formatdump(r)
+                r = t.formatdump(dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_'), val)
                 if hasattr(t, 'extraformatter'):
                     try:
                         r = t.extraformatter(r)
@@ -1317,11 +1312,16 @@ class typedef(object):
         when create() is called)
         '''
         return False
-    def formatdump(self, dumpvalue):
+    def formatdump(self, dumpvalue, v):
         '''
         Format the dumpvalue when dump() is called with humanread = True
+        
         :param dumpvalue: the return value of dump() before formatting.
+        
+        :param v: the original data
+        
         :returns: return a formatted version of the value.
+        
         '''
         return dumpvalue
 
@@ -1906,6 +1906,8 @@ class nstruct(typedef):
                 raise ValueError('Classifyby is defined in %r without a base class' % (self,))
             if self.criteria is not None and self.criteria is not _never:
                 raise ValueError('criteria is defined in %r without a base class' % (self,))
+            if 'padding' not in arguments:
+                warnings.warn(StructDefWarning('padding is not defined in %r; default to 8 (is that what you want?)' % (self,)))
         self.subclasses = []
         lastinline_format = []
         lastinline_properties = []
@@ -2083,7 +2085,7 @@ class nstruct(typedef):
         self.subclasses.append(newchild)
         if hasattr(self, '_parser'):
             newchild.parser()
-    def formatdump(self, dumpvalue):
+    def formatdump(self, dumpvalue, val):
         try:
             for k,v in self.listformatters.items():
                 current = dumpvalue
@@ -2120,6 +2122,14 @@ class nstruct(typedef):
                         last[lastkey] = v(current)
                     except:
                         NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
+            v2 = val
+            while v2:
+                if hasattr(v2, '_seqs'):
+                    for s in v2._seqs:
+                        st = s._gettype()
+                        if st is not None and hasattr(st, 'formatdump'):
+                            dumpvalue = st.formatdump(dumpvalue, s)
+                v2 = getattr(v2, '_sub', None)
         except:
             NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
         return dumpvalue
@@ -2465,7 +2475,7 @@ class optional(typedef):
         return self.basetype.isextra()
     def __repr__(self, *args, **kwargs):
         return repr(self.basetype) + '?'
-    def formatdump(self, dumpvalue):
+    def formatdump(self, dumpvalue, val):
         try:
             if self.name in dumpvalue:
                 v = dumpvalue[self.name]
@@ -2477,6 +2487,14 @@ class optional(typedef):
                             NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
                 if self._formatter:
                     dumpvalue[self.name] = self._formatter(v)                            
+            v2 = val
+            while v2:
+                if hasattr(v2, '_seqs'):
+                    for s in v2._seqs:
+                        st = s._gettype()
+                        if st is not None and hasattr(st, 'formatdump'):
+                            dumpvalue = st.formatdump(dumpvalue, s)
+                v2 = getattr(v2, '_sub', None)
         except:
             NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)            
         return dumpvalue
@@ -2585,7 +2603,7 @@ class darray(typedef):
         return False
     def __repr__(self, *args, **kwargs):
         return repr(self.basetype) + '[]'
-    def formatdump(self, dumpvalue):
+    def formatdump(self, dumpvalue, val):
         try:
             if hasattr(self.innertype, 'formatter'):
                 listformatter = self.innertype.formatter
@@ -2595,6 +2613,14 @@ class darray(typedef):
                         v[i] = listformatter(v[i])
                     except:
                         NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)            
+            v2 = val
+            while v2:
+                if hasattr(v2, '_seqs'):
+                    for s in v2._seqs:
+                        st = s._gettype()
+                        if st is not None and hasattr(st, 'formatdump'):
+                            dumpvalue = st.formatdump(dumpvalue, s)
+                v2 = getattr(v2, '_sub', None)
         except:
             NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)            
         return dumpvalue
@@ -2761,7 +2787,7 @@ class bitfield(typedef):
             return self.readablename
         else:
             return typedef.__repr__(self, *args, **kwargs)
-    def formatdump(self, dumpvalue):
+    def formatdump(self, dumpvalue, val):
         try:
             for k,v in self.listformatters.items():
                 try:
@@ -2781,6 +2807,14 @@ class bitfield(typedef):
                     dumpvalue[k] = v(dumpvalue[k])
                 except:
                     NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
+            v2 = val
+            while v2:
+                if hasattr(v2, '_seqs'):
+                    for s in v2._seqs:
+                        st = s._gettype()
+                        if st is not None and hasattr(st, 'formatdump'):
+                            dumpvalue = st.formatdump(dumpvalue, s)
+                v2 = getattr(v2, '_sub', None)
         except:
             NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
         return dumpvalue
