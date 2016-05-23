@@ -52,7 +52,7 @@ def _format_multilines(v, ljust_len):
 def format_table(x):
     ljust_len = (max(max(len(k) for k in x) + 2, 12) + 3) // 4 * 4
     for k,v in x.items():
-        print((k + ':').ljust(ljust_len), _format_multilines(_str2(v), ljust_len))
+        print((k + ':').ljust(ljust_len), _format_multilines(_str2(v), ljust_len + 1))
     print()
 
 def format_pprint(x):
@@ -191,7 +191,7 @@ if __name__ == '__main__':
         group.add_argument('-7', action="store_const", help='Parse the full packet including all data', const = 7, dest = 'level')
         parse.add_argument('-l', '--length', type=int, help='Capture packet size limit', default=128)
         parse.add_argument('-p', '--protocol', help='Capture only specified type, valid types are ip/ip6/arp/all/(number)', default="all")
-        parse.add_argument('-f', '--format', help='Detail format, table/json/pprint', default='pprint')
+        parse.add_argument('-f', '--format', help='Detail format, table/json/pprint', default='table')
         parse.add_argument('filter', nargs='*', help='Filters like \"dl_src=00:01:02:03:04:05\". Support operaters are: =, !=, <, >, <=, >=, ~, !~ each stands for '\
                            ' equal, not equal, not equal, less, greater, less equal, greater equal, match regexp, not match regexp.')
         args = parse.parse_args()
