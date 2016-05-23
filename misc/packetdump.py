@@ -44,7 +44,10 @@ def _format_multilines(v, ljust_len):
     for l in v.splitlines():
         for i in range(0, len(l), screen_width):
             lines.append(l[i:i+screen_width])
-    return '\n'.join([lines[0]] + [' ' * ljust_len + l for l in lines[1:]])
+    if lines:
+        return ''
+    else:
+        return '\n'.join([lines[0]] + [' ' * ljust_len + l for l in lines[1:]])
 
 def format_table(x):
     ljust_len = (max(max(len(k) for k in x) + 2, 12) + 3) // 4 * 4
