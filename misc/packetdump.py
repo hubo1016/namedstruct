@@ -44,7 +44,7 @@ def _format_multilines(v, ljust_len):
     for l in v.splitlines():
         for i in range(0, len(l), screen_width):
             lines.append(l[i:i+screen_width])
-    if lines:
+    if not lines:
         return ''
     else:
         return '\n'.join([lines[0]] + [' ' * ljust_len + l for l in lines[1:]])
