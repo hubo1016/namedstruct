@@ -97,7 +97,10 @@ def create_desp(pd):
     return b', '.join(c + ': ' + _str2(pd[c]) for c in defined_columns if c in pd)
 
 def format_packet(pd, verbose, addr):
-    print(current_timestamp(), '{0} - {dl_src} > {dl_dst}, {dl_type}'.format(*addr, **pd), create_desp(pd))
+    if addr[2] == 4:
+        print(current_timestamp(), '{0} - {dl_src} > {dl_dst}, {dl_type}'.format(*addr, **pd), create_desp(pd))
+    else:
+        print(current_timestamp(), '{0} - {dl_dst} < {dl_src}, {dl_type}'.format(*addr, **pd), create_desp(pd))
     if verbose:
         verbose(pd)
 
