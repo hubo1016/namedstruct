@@ -470,7 +470,7 @@ def _prepack_tcp_option(x):
 tcp_option = nstruct((_tcp_option_header,),
                      name = "tcp_option",
                      padding = 1,
-                     size = lambda x: 1 if (x.kind == TCPOPT_EOL or x.kind == TCP_OPT_NOP) else x.length,
+                     size = lambda x: 1 if (x.kind == TCPOPT_EOL or x.kind == TCPOPT_NOP) else x.length,
                      prepack = _prepack_tcp_option
                      )
 
