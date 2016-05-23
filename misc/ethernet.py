@@ -531,8 +531,7 @@ tcp_header = nstruct((tcp_header_min,),
                       name = 'tcp_header',
                       padding = 4,
                       size = lambda x: (x.data_offset >> 4) * 4,
-                      prepack = _pack_tcp_header_size,
-                      extend = {'tcp_options': _format_tcp_}
+                      prepack = _pack_tcp_header_size
                       )
 
 tcp_payload = nstruct((tcp_header,),
