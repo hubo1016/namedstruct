@@ -30,7 +30,7 @@ def _format_multilines(v, ljust_len):
 def format_table(x):
     ljust_len = (max(max(len(k) for k in x) + 2, 12) + 3) // 4 * 4
     for k,v in x.items():
-        print((k + ':').ljust(ljust_len), _format_multilines(v, ljust_len))
+        print((k + ':').ljust(ljust_len), _format_multilines(_str(v), ljust_len))
     print()
 
 def format_pprint(x):
