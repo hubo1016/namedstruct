@@ -5,6 +5,7 @@ Created on 2015/7/30
 '''
 
 from namedstruct import *
+from namedstruct.namedstruct import rawtype as _rawtype
 import array
 import socket
 
@@ -516,7 +517,7 @@ def _format_tcp_options(x):
             result.append(str(od['kind']) + ': ' + repr(od['_extra']))
     return ', '.join(result)
 
-_tcp_option_raw = rawtype()
+_tcp_option_raw = _rawtype()
 _tcp_option_raw.formatter = _format_tcp_options
 
 tcp_header = nstruct((tcp_header_min,),
