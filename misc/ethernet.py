@@ -481,18 +481,21 @@ def _init_tcp_option(kind):
     return _init_func
 
 tcp_option_maxseg = nstruct((uint16, 'mss'),
+                            name = 'tcp_option_maxseg',
                             base = tcp_option,
                             criteria = lambda x: x.kind == TCPOPT_MAXSEG,
                             init = _init_tcp_option(TCPOPT_MAXSEG)
                             )
 
 tcp_option_window = nstruct((uint8, 'shift_cnt'),
+                            name = 'tcp_option_window',
                             base = tcp_option,
                             criteria = lambda x: x.kind == TCPOPT_WINDOW,
                             init = _init_tcp_option(TCPOPT_WINDOW)
                             )
 
 tcp_option_sack = nstruct((uint32[2][0], 'edges'),
+                          name = 'tcp_option_sack',
                           base = tcp_option,
                           criteria = lambda x: x.kind == TCPOPT_SACK,
                           init = _init_tcp_option(TCPOPT_SACK)
@@ -500,6 +503,7 @@ tcp_option_sack = nstruct((uint32[2][0], 'edges'),
 
 tcp_option_timestamp = nstruct((uint32, 'tsval'),
                                (uint32, 'tsecr'),
+                               name = 'tcp_option_timestamp',
                                base = tcp_option,
                                criteria = lambda x: x.kind == TCPOPT_TIMESTAMP,
                                init = _init_tcp_option(TCPOPT_TIMESTAMP))
@@ -510,11 +514,16 @@ def _format_tcp_options(x):
     result = []
     for o in options:
         od = dump(o, dumpextra = True, typeinfo = DUMPTYPE_NONE)
+        anyvalue = False
         for k,v in od.items():
             if k not in ('kind', 'length') and not k.startswith('_'):
                 result.append(k + ': ' + repr(v))
+                anyvalue = True
         if '_extra' in od:
             result.append(str(od['kind']) + ': ' + repr(od['_extra']))
+            anyvalue = True
+        if not anyvalue and o.kind != TCPOPT_EOL and o.kind != TCPOPT_NOP:
+            result.append(od['kind'])
     return ', '.join(result)
 
 _tcp_option_raw = _rawtype()
