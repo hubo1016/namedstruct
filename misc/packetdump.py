@@ -159,7 +159,7 @@ def auto_reg(leftvalue, rightvalue, operator):
             lv = x[leftvalue]
         except Exception:
             return False
-        return operator(_str(lv), rr)
+        return operator(lv, rr)
     return comp
     
 
