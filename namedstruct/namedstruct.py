@@ -2606,7 +2606,7 @@ class darray(typedef):
     def isextra(self):
         return False
     def __repr__(self, *args, **kwargs):
-        return repr(self.basetype) + '[]'
+        return repr(self.innertype) + '[]'
     def formatdump(self, dumpvalue, val):
         try:
             if hasattr(self.innertype, 'formatter'):
