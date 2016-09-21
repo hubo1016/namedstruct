@@ -2,7 +2,7 @@
 .. highlight:: python
 
 Public API Interfaces
-=======================================
+=====================
 .. py:currentmodule:: namedstruct
 .. autoclass:: typedef
    :special-members:
@@ -20,6 +20,9 @@ Public API Interfaces
    :special-members:
    :members:
 .. autoclass:: darray
+   :special-members:
+   :members:
+.. autoclass:: nvariant
    :special-members:
    :members:
 .. autofunction:: dump

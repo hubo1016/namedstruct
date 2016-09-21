@@ -145,7 +145,81 @@ class Test(unittest.TestCase):
         self.assertEqual(b, b'\x00\x02')
         b = s._get_embedded(s1)._tobytes(True)
         self.assertEqual(b, b'\x00\x02')
-        
+    def testVariant(self):
+        vtype = enum('vtype', None, uint8,
+                     TYPE_A = 1,
+                     TYPE_B = 2,
+                     TYPE_C = 3)
+        v1 = nvariant('v1',
+                      nstruct((vtype, 'type'),
+                              name = 'v1h',
+                              padding = 1),
+                      classifier = lambda x: x.type)
+        n1 = nstruct((uint32, 'a'), name = 'n1', base = v1, classifyby = (1,), init = packvalue(1, 'type'))
+        n2 = nstruct((uint16, 'b'), name = 'n1', base = v1, classifyby = (2,), init = packvalue(2, 'type'))
+        n3 = nstruct((uint16, 'sublen'),
+                     (uint16, 'subtype'),
+                     name = 'n3',
+                     base = v1,
+                     classifyby = (3,),
+                     init = packvalue(3, 'type'),
+                     prepack = packrealsize('sublen'),
+                     size = lambda x: x.sublen,
+                     padding = 1
+                     )
+        n3_sub1 = nstruct((uint16[0], 'subarray'),
+                         name = 'n3_sub1',
+                         base = n3,
+                         criteria = lambda x: x.subtype == 1,
+                         init = packvalue(1, 'subtype'))
+        n3_sub2 = nstruct((raw, 'text'),
+                         name = 'n3_sub2',
+                         base = n3,
+                         criteria = lambda x: x.subtype == 2,
+                         init = packvalue(2, 'subtype'))
+        np_array = nstruct((uint32, 'length'),
+                           (v1[0], 'array'),
+                           name = 'np_array',
+                           padding = 1,
+                           size = lambda x: x.length,
+                           prepack = packsize('length'))
+        s = n1(a = 1)
+        b = s._tobytes()
+        self.assertEqual(b, b'\x01\x00\x00\x00\x01')
+        r = v1.parse(b'\x01\x00')
+        self.assertIsNone(r)
+        r = v1.parse(b)
+        self.assertIsNotNone(r)
+        s2, l = r
+        self.assertEqual(l, len(b))
+        self.assertEqual(s2.a, 1)
+        self.assertEqual(dump(s2, typeinfo = DUMPTYPE_NONE), {'type': 'TYPE_A', 'a': 1})
+        s = n2(b = 2)
+        b = s._tobytes()
+        self.assertEqual(b, b'\x02\x00\x02')
+        r = v1.parse(b)
+        self.assertIsNotNone(r)
+        s2, l = r
+        self.assertEqual(l, len(b))
+        self.assertEqual(s2.b, 2)
+        s = n3_sub1(subarray = [1,2,3])
+        b = s._tobytes()
+        self.assertEqual(b, b'\x03\x00\x0a\x00\x01\x00\x01\x00\x02\x00\x03')
+        r = v1.parse(b)
+        self.assertIsNotNone(r)
+        s2, l = r
+        self.assertEqual(l, len(b))
+        self.assertEqual(s2.subarray, [1,2,3])
+        s = np_array(array = [n1(a = 1), n2(b = 2), n1(a = 3), n3_sub2(text = 'def'), n3_sub1(subarray = [1,2,3])])
+        b = s._tobytes()
+        self.assertEqual(b, b'\x00\x00\x00\x24\x01\x00\x00\x00\x01\x02\x00\x02\x01\x00\x00\x00\x03\x03\x00\x07\x00\x02def\x03\x00\x0a\x00\x01\x00\x01\x00\x02\x00\x03')
+        s2, l = np_array.parse(b)
+        self.assertEqual(l, len(b))
+        self.assertEqual(s2.array[0].a, 1)
+        self.assertEqual(s2.array[1].b, 2)
+        self.assertEqual(s2.array[2].a, 3)
+        self.assertEqual(s2.array[3].text, 'def')
+        self.assertEqual(s2.array[4].subarray, [1,2,3])
         
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

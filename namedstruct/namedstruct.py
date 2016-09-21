@@ -2089,9 +2089,12 @@ class nstruct(typedef):
         self.subclasses.append(newchild)
         if hasattr(self, '_parser'):
             newchild.parser()
-    def formatdump(self, dumpvalue, val):
+    def formatdump(self, dumpvalue, v):
+        return nstruct._formatdump(self, dumpvalue, v)
+    @staticmethod
+    def _formatdump(ns, dumpvalue, val):
         try:
-            for k,v in self.listformatters.items():
+            for k,v in ns.listformatters.items():
                 current = dumpvalue
                 try:
                     for ks in k:
@@ -2104,7 +2107,7 @@ class nstruct(typedef):
                         current[i] = v(current[i])
                 except:
                     NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
-            for k,v in self.formatters.items():
+            for k,v in ns.formatters.items():
                 current = dumpvalue
                 last = None
                 lastkey = None
@@ -2822,3 +2825,147 @@ class bitfield(typedef):
         except:
             NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
         return dumpvalue
+
+class VariantParser(Parser):
+    '''
+    Parser for *variant* type
+    '''
+    def __init__(self, typedef, header = None, classifier = None, prepackfunc = None, padding = 1):
+        Parser.__init__(self, padding = padding, typedef=typedef, classifier=classifier, prepackfunc=prepackfunc)
+        self.header = header
+    def _parseinner(self, data, s, create = False):
+        s._seqs = []
+        if self.header is not None:
+            # Create an embedded struct
+            r = self.header.parse(data, s._target)
+            if r is None:
+                return None
+            else:
+                h, start = r
+                s._seqs.append(h)
+        else:
+            start = 0
+        subp = None
+        clsfr = self.classifier
+        if clsfr is not None:
+            clsvalue = clsfr(s)
+            subp = self.subindices.get(clsvalue)
+        if subp is None:
+            for sc in self.subclasses:
+                if sc.isinstance(s):
+                    subp = sc
+                    break
+        if subp is None:
+            return 0
+        else:
+            if create:
+                inner = subp._create(data[start:], s._target)
+                size = len(data)
+            else:
+                r = subp._parse(data[start:], s._target)
+                if r is None:
+                    return None
+                (inner, size) = r
+            s._extend(inner)
+            return start + size
+    def _parse(self, data, inlineparent = None):
+        s = _create_struct(self, inlineparent)
+        size = self._parseinner(data, s)
+        if size is None:
+            return None
+        else:
+            return (s, size)
+    def _new(self, inlineparent=None):
+        s = _create_struct(self, inlineparent)
+        inlineparent = s._target
+        s._seqs = []
+        if self.header is not None:
+            s._seqs.append(self.header.new(inlineparent))
+        return s
+    def unpack(self, data, namedstruct):
+        size = self._parseinner(data, namedstruct, True)
+        if size is None:
+            raise BadLenError('Bad Len')
+        else:
+            return data[size:]
+    def pack(self, namedstruct):
+        if self.header is not None:
+            return self.header.tobytes(namedstruct._seqs[0])
+        else:
+            return b''
+    def sizeof(self, namedstruct):
+        if self.header is not None:
+            return self.header.paddingsize(namedstruct._seqs[0])
+        else:
+            return 0
+
+
+class nvariant(typedef):
+    '''
+    An *nvariant* struct is a specialized base for *nstruct*. Different from normal *nstruct*, it does not
+    have *size* option, instead, its size is determined by subclassed structs.
+    
+    A *variant* type can not be parsed with enough compatibility: if a new type of subclassed struct is
+    not recognized, the whole data may be corrupted. It is not recommended to use this type for newly
+    designed data structures, only use them to define data structures that: already exists; cannot be
+    parsed by other ways. 
+    '''
+    def __init__(self, name, header = None, classifier = None, prepackfunc = None, padding = 1):
+        '''
+        Initializer.
+        
+        :param name: type name
+
+        :param header: An embedded type, usually an nstruct. It is embedded to the nvariant and parsed before
+        subclassing.
+                
+        :param classifier: same as *nstruct*
+        
+        :param prepackfunc: same as *nstruct*
+        '''
+        self.subclasses = []
+        self.classifier = classifier
+        self.prepackfunc = prepackfunc
+        self.padding = padding
+        self.header = header
+        self.inline_names = {}
+        self.formatters = {}
+        self.listformatters = {}
+        if header is not None:
+            header_name = getattr(header, 'readablename', None)
+            if header_name is not None:
+                self.inline_names[header_name] = 0
+            if hasattr(header, 'formatters'):
+                for k,v in header.formatters.items():
+                    self.formatters[k] = v
+            if hasattr(header, 'listformatters'):
+                for k,v in header.listformatters.items():
+                    self.listformatters[k] = v
+            if hasattr(header, 'extraformatter'):
+                self.formatters[(header,)] = v                        
+        if name is None:
+            warnings.warn(StructDefWarning('nvariant type is not named'))
+        self.readablename = name
+    def _compile(self):
+        if self.header is not None:
+            hp = self.header.parser()
+        else:
+            hp = None
+        self._parser = VariantParser(self, hp, self.classifier, self.prepackfunc, self.padding)
+        for sc in self.subclasses:
+            sc.parser()
+        return self._parser
+    def isextra(self):
+        return False
+    def __repr__(self, *args, **kwargs):
+        if self.readablename is not None:
+            return self.readablename
+        else:
+            return '<variant>'
+    def formatdump(self, dumpvalue, val):
+        return nstruct._formatdump(self, dumpvalue, val)
+    def derive(self, newchild):
+        self.subclasses.append(newchild)
+        if hasattr(self, '_parser'):
+            newchild.parser()
+    
