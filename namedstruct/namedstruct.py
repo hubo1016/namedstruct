@@ -2856,7 +2856,7 @@ class VariantParser(Parser):
                     subp = sc
                     break
         if subp is None:
-            return 0
+            return start
         else:
             if create:
                 inner = subp._create(data[start:], s._target)
