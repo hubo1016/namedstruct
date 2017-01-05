@@ -2917,7 +2917,7 @@ class nvariant(typedef):
         :param name: type name
 
         :param header: An embedded type, usually an nstruct. It is embedded to the nvariant and parsed before
-        subclassing.
+               subclassing.
                 
         :param classifier: same as *nstruct*
         
