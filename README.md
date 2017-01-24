@@ -1,4 +1,8 @@
 # namedstruct
+
+[![Build Status](https://travis-ci.org/hubo1016/namedstruct.svg?branch=master)](https://travis-ci.org/hubo1016/namedstruct)
+[![PyPI](https://img.shields.io/pypi/v/nstruct.svg)](https://pypi.python.org/pypi/nstruct)
+
 Define complicated C/C++ structs in Python with variable length arrays, header/extend relations, extensible structures in one time, parse/rebuild them with a single line of code
 
 This library is designed for Openflow structures parsing in [VLCP](https://github.com/hubo1016/vlcp) project.
