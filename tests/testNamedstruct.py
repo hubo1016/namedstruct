@@ -218,7 +218,7 @@ class Test(unittest.TestCase):
         s2, l = r
         self.assertEqual(l, len(b))
         self.assertEqual(s2.type, 4)
-        s = np_array(array = [n1(a = 1), n2(b = 2), n1(a = 3), n3_sub2(text = 'def'), n3_sub1(subarray = [1,2,3])])
+        s = np_array(array = [n1(a = 1), n2(b = 2), n1(a = 3), n3_sub2(text = b'def'), n3_sub1(subarray = [1,2,3])])
         b = s._tobytes()
         self.assertEqual(b, b'\x00\x00\x00\x24\x01\x00\x00\x00\x01\x02\x00\x02\x01\x00\x00\x00\x03\x03\x00\x07\x00\x02def\x03\x00\x0a\x00\x01\x00\x01\x00\x02\x00\x03')
         s2, l = np_array.parse(b)
@@ -226,7 +226,7 @@ class Test(unittest.TestCase):
         self.assertEqual(s2.array[0].a, 1)
         self.assertEqual(s2.array[1].b, 2)
         self.assertEqual(s2.array[2].a, 3)
-        self.assertEqual(s2.array[3].text, 'def')
+        self.assertEqual(s2.array[3].text, b'def')
         self.assertEqual(s2.array[4].subarray, [1,2,3])
         
 if __name__ == "__main__":
