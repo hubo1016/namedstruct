@@ -7,6 +7,14 @@ from __future__ import print_function, absolute_import, division
 import struct
 import logging
 import warnings
+try:
+    from collections import OrderedDict as OrderedDict
+except Exception:
+    _has_ordered_dict = False
+    OrderedDict = dict
+else:
+    _has_ordered_dict = True
+
 
 class ParseError(ValueError):
     '''
@@ -177,6 +185,14 @@ class NamedStruct(object):
             if tn is not None:
                 lastname = tn
         return lastname
+    def _getbasetype(self):
+        '''
+        Return base type of this struct
+        
+        :returns: a typedef object (e.g. nstruct)
+        
+        '''
+        return getattr(self._parser, 'typedef', None)
     def _setextra(self, extradata):
         '''
         Set the _extra field in the struct, which stands for the additional ("extra") data after the
@@ -334,7 +350,7 @@ DUMPTYPE_FLAT = 'flat'
 DUMPTYPE_KEY = 'key'
 DUMPTYPE_NONE = 'none'
 
-def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT):
+def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT, ordered=True):
     '''
     Convert a parsed NamedStruct (probably with additional NamedStruct as fields) into a
     JSON-friendly format, with only Python primitives (dictionaries, lists, bytes, integers etc.)
@@ -368,7 +384,10 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT):
             r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if not k[:1] != '_')
         else:
             if humanread:
-                r = t.formatdump(dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_'), val)
+                r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_')
+                if ordered:
+                    r = t.reorderdump(r, val)
+                r = t.formatdump(r, val)
                 if hasattr(t, 'extraformatter'):
                     try:
                         r = t.extraformatter(r)
@@ -376,6 +395,8 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT):
                         NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
             else:
                 r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_')
+                if ordered:
+                    r = t.reorderdump(r, val)
         if dumpextra:
             extra = val._getextra()
             if extra:
@@ -1328,6 +1349,11 @@ class typedef(object):
         
         '''
         return dumpvalue
+    def reorderdump(self, dumpvalue, v):
+        '''
+        Reorder the dict to match the original field order
+        '''
+        return dumpvalue
 
 class arraytype(typedef):
     '''
@@ -1451,6 +1477,32 @@ class chartype(prim):
 
 char = chartype()
 
+
+def _merge_to(path, from_dict, to_dict):
+    current = from_dict
+    for p in path[:-1]:
+        if p not in current:
+            return
+        current = current[p]
+    if path[-1] not in current:
+        return
+    v = current.pop(path[-1])
+    current = to_dict
+    for p in path[:-1]:
+        if p not in to_dict:
+            to_dict[p] = OrderedDict()
+        current = to_dict[p]
+    current[path[-1]] = v
+
+
+def _merge_dict(from_dict, to_dict):
+    for k,v in from_dict.items():
+        if isinstance(v, dict):
+            _merge_dict(v, to_dict.setdefault(k, OrderedDict()))
+        else:
+            to_dict[k] = v
+
+
 class fixedstruct(typedef):
     '''
     A type with fixed structure. Do not define this kind of type directly; nstruct will automatically create
@@ -1518,6 +1570,10 @@ class fixedstruct(typedef):
             return str(self.readablename)
         else:
             return 'fixed(%r)' % (self.format,)
+    def _reorder_properties(self, unordered_dict, ordered_dict, val):
+        for p in self.properties:
+            property_path = p[0]
+            _merge_to(property_path, unordered_dict, ordered_dict)
 
 class StructDefWarning(Warning):
     pass
@@ -2034,6 +2090,7 @@ class nstruct(typedef):
                                          self.readablename, self.inlineself, self.initfunc, self, self.classifier, self.classifyby)
                 self._inline = self.fixedstruct.inline()
                 self.lastextra = False
+                self.propertynames = []
             else:
                 self.seqs = seqs
                 if self.lastextra is None:
@@ -2140,6 +2197,30 @@ class nstruct(typedef):
         except:
             NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
         return dumpvalue
+    def _reorder_properties(self, unordered_dict, ordered_dict, val):
+        _basetype = val._getbasetype()
+        while _basetype is not self:
+            if hasattr(_basetype, '_reorder_properties'):
+                _basetype._reorder_properties(unordered_dict, ordered_dict, val)
+            val = val._sub
+            _basetype = val._getbasetype()
+        if hasattr(self, 'fixedstruct'):
+            self.fixedstruct._reorder_properties(unordered_dict, ordered_dict, val)
+        else:
+            _seqindex = 0
+            for s, name in self.seqs:
+                if name is None:
+                    t = val._seqs[_seqindex]._gettype()
+                    if hasattr(t, '_reorder_properties'):
+                        t._reorder_properties(unordered_dict, ordered_dict, val._seqs[_seqindex])
+                    _seqindex += 1
+                else:
+                    _merge_to((name[0],), unordered_dict, ordered_dict)
+    def reorderdump(self, dumpvalue, v):
+        to_dict = OrderedDict()
+        self._reorder_properties(dumpvalue, to_dict, v)
+        _merge_dict(dumpvalue, to_dict)
+        return to_dict
 
 class enum(prim):
     '''
@@ -2505,6 +2586,8 @@ class optional(typedef):
         except:
             NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)            
         return dumpvalue
+    def _reorder_properties(self, unordered_dict, ordered_dict, val):
+        _merge_to((self.name,), unordered_dict, ordered_dict)
 
 class DArrayParser(Parser):
     '''
@@ -2825,6 +2908,15 @@ class bitfield(typedef):
         except:
             NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
         return dumpvalue
+    def _reorder_properties(self, unordered_dict, ordered_dict, val):
+        for _, name in self.fields:
+            _merge_to((name,), unordered_dict, ordered_dict)
+    def reorderdump(self, dumpvalue, v):
+        to_dict = OrderedDict()
+        self._reorder_properties(dumpvalue, to_dict, v)
+        _merge_dict(dumpvalue, to_dict)
+        return to_dict
+
 
 class VariantParser(Parser):
     '''
@@ -2968,4 +3060,12 @@ class nvariant(typedef):
         self.subclasses.append(newchild)
         if hasattr(self, '_parser'):
             newchild.parser()
-    
+    def _reorder_properties(self, unordered_dict, ordered_dict, val):
+        t = val._seqs[0]._gettype()
+        if t is not None and hasattr(t, '_reorder_properties'):
+            t._reorder_properties(unordered_dict, ordered_dict, val._seqs[0])
+    def reorderdump(self, dumpvalue, v):
+        to_dict = OrderedDict()
+        self._reorder_properties(dumpvalue, to_dict, v)
+        _merge_dict(dumpvalue, to_dict)
+        return to_dict
