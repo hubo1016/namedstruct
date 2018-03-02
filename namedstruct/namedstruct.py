@@ -15,7 +15,6 @@ except Exception:
 else:
     _has_ordered_dict = True
 
-
 class ParseError(ValueError):
     '''
     Base class for error in parsing
@@ -350,7 +349,28 @@ DUMPTYPE_FLAT = 'flat'
 DUMPTYPE_KEY = 'key'
 DUMPTYPE_NONE = 'none'
 
-def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT, ordered=True):
+
+def _to_str(dumped_val, encoding='utf-8', ordered=True):
+    """
+    Convert bytes in a dump value to str, allowing json encode
+    """
+    _dict = OrderedDict if ordered else dict
+    if isinstance(dumped_val, dict):
+        return OrderedDict((k, _to_str(v, encoding)) for k,v in dumped_val.items())
+    elif isinstance(dumped_val, (list, tuple)):
+        return [_to_str(v, encoding) for v in dumped_val]
+    elif isinstance(dumped_val, bytes):
+        try:
+            d = dumped_val.decode('utf-8')
+        except Exception:
+            d = repr(dumped_val)
+        return d
+    else:
+        return dumped_val
+
+
+def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT, ordered=True,
+         tostr=False, encoding='utf-8'):
     '''
     Convert a parsed NamedStruct (probably with additional NamedStruct as fields) into a
     JSON-friendly format, with only Python primitives (dictionaries, lists, bytes, integers etc.)
@@ -374,17 +394,28 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT, ord
       DUMPTYPE_NONE ('none')
         do not add type information
     
+    :param tostr: if True, convert all bytes to str
+    
+    :param encoding: if tostr=`True`, first try to decode bytes in `encoding`. If failed, use `repr()` instead.
+    
     :returns: "dump" format of val, suitable for JSON-encode or print.
     '''
+    dumped = _dump(val, humanread, dumpextra, typeinfo, ordered)
+    if tostr:
+        dumped = _to_str(dumped, encoding, ordered)
+    return dumped
+
+
+def _dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT, ordered=True):
     if val is None:
         return val
     if isinstance(val, NamedStruct):
         t = val._gettype()
         if t is None:
-            r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if not k[:1] != '_')
+            r = dict((k, _dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if not k[:1] != '_')
         else:
             if humanread:
-                r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_')
+                r = dict((k, _dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_')
                 if ordered:
                     r = t.reorderdump(r, val)
                 r = t.formatdump(r, val)
@@ -394,7 +425,7 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT, ord
                     except:
                         NamedStruct._logger.log(logging.DEBUG, 'A formatter thrown an exception', exc_info = True)
             else:
-                r = dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_')
+                r = dict((k, _dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_')
                 if ordered:
                     r = t.reorderdump(r, val)
         if dumpextra:
@@ -414,11 +445,12 @@ def dump(val, humanread = True, dumpextra = False, typeinfo = DUMPTYPE_FLAT, ord
                 r = {'<' + repr(t) + '>' : r}
         return r
     elif isinstance(val, InlineStruct):
-        return dict((k, dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_')
+        return dict((k, _dump(v, humanread, dumpextra, typeinfo)) for k, v in val.__dict__.items() if k[:1] != '_')
     elif isinstance(val, list) or isinstance(val, tuple):
-        return [dump(v, humanread, dumpextra, typeinfo) for v in val]
+        return [_dump(v, humanread, dumpextra, typeinfo) for v in val]
     else:
         return val
+
 
 def _copy(buffer):
     try:
