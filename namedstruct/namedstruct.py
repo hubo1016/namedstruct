@@ -195,7 +195,7 @@ class NamedStruct(object):
         
         :param parser: parser of subclass 
         '''
-        _set(self, '_sub', parser._create(getattr(self, '_extra', b''), self._target))
+        _set(self, '_sub', parser._create(memoryview(getattr(self, '_extra', b'')), self._target))
         try:
             object.__delattr__(self, '_extra')
         except:
@@ -274,12 +274,12 @@ class NamedStruct(object):
         '''
         Create a copy of the struct. It is always a deepcopy, in fact it packs the struct and unpack it again.
         '''
-        return self._parser.create(self._tobytes(), None)
+        return self._parser.create(memoryview(self._tobytes()), None)
     def __deepcopy__(self, memo):
         '''
         Create a copy of the struct.
         '''
-        return self._parser.create(self._tobytes(), None)
+        return self._parser.create(memoryview(self._tobytes()), None)
     def __repr__(self, *args, **kwargs):
         '''
         Return the representation of the struct.
@@ -1308,9 +1308,9 @@ class RawParser(object):
         Compatible to Parser.create()
         '''
         if self.cstr:
-            return data.rstrip(b'\x00')
+            return _copy(data).rstrip(b'\x00')
         else:
-            return data
+            return _copy(data)
     def sizeof(self, prim):
         '''
         Compatible to Parser.sizeof()
@@ -1340,18 +1340,18 @@ class CstrParser(object):
         pass
     def parse(self, buffer, inlineparent = None):
         for i in range(0, len(buffer)):
-            if buffer[i:i+1] == b'\x00':
-                return (buffer[0:i], i + 1)
+            if buffer[i] in (0, b'\x00'):
+                return (_copy(buffer[:i]), i + 1)
         return None
     def new(self, inlineparent = None):
         return b''
     def create(self, data, inlineparent = None):
-        if data[-1:] != b'\x00':
-            raise BadFormatError(b'Cstr is not zero-terminated')
+        if data[-1] not in (0, b'\x00'):
+            raise BadFormatError('Cstr is not zero-terminated')
         for i in range(0, len(data) - 1):
-            if data[i:i+1] == b'\x00':
-                raise BadFormatError(b'Cstr has zero inside the string')
-        return data
+            if data[i] in (0, b'\x00'):
+                raise BadFormatError('Cstr has zero inside the string')
+        return _copy(data)
     def sizeof(self, prim):
         return len(prim) + 1
     def paddingsize(self, prim):
