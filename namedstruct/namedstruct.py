@@ -7,6 +7,7 @@ from __future__ import print_function, absolute_import, division
 import struct
 import logging
 import warnings
+from io import BytesIO
 try:
     from collections import OrderedDict as OrderedDict
 except Exception:
@@ -40,20 +41,19 @@ def _set(obj, name, value):
 _deprecated_parsers = set()
 
 
-def _tobuffer(parser, obj, buffer, skipprepack = False):
+def _tostream(parser, obj, stream, skipprepack = False):
     """
     Compatible to old parsers
     """
-    if hasattr(parser, 'tobuffer'):
-        return parser.tobuffer(obj, buffer, skipprepack)
+    if hasattr(parser, 'tostream'):
+        return parser.tostream(obj, stream, skipprepack)
     else:
         data = parser.tobytes(obj, skipprepack)
-        buffer.append(data)
         cls = type(parser)
         if cls not in _deprecated_parsers:
             _deprecated_parsers.add(cls)
-            warnings.warn("Parser %r does not have 'tobuffer' interfaces" % (cls,), UserWarning)
-        return len(data)
+            warnings.warn("Parser %r does not have 'tostream' interfaces" % (cls,), UserWarning)
+        return stream.write(data)
 
 
 class NamedStruct(object):
@@ -107,14 +107,14 @@ class NamedStruct(object):
         :returns: packed bytes
         
         '''
-        buffer = []
-        self._packto(buffer)
-        return b''.join(buffer)
-    def _packto(self, buffer):
+        stream = BytesIO()
+        self._packto(stream)
+        return stream.getvalue()
+    def _packto(self, stream):
         '''
-        Pack current struct into buffer. For parser internal use.
+        Pack current struct into stream. For parser internal use.
         
-        :param buffer: a list of bytes
+        :param stream: a buffered stream (File or BytesIO)
         
         :return: packed bytes length
         '''
@@ -122,13 +122,12 @@ class NamedStruct(object):
         total_size = 0
         current = self
         while current is not None:
-            total_size += current._parser.packto(current, buffer)
+            total_size += current._parser.packto(current, stream)
             last = current
             current = getattr(current, '_sub', None)
         if hasattr(last, '_extra'):
             _extra = last._extra
-            total_size += len(_extra)
-            buffer.append(_extra)
+            total_size += stream.write(_extra)
         return total_size
     
     def _prepack(self):
@@ -147,16 +146,14 @@ class NamedStruct(object):
         
         :returns: converted bytes
         '''
-        buffer = []
-        size = self._tobuffer(buffer, skipprepack)
-        r = b''.join(buffer)
-        assert len(r) == size
-        return r
-    def _tobuffer(self, buffer, skipprepack= False):
+        stream = BytesIO()
+        self._tostream(stream, skipprepack)
+        return stream.getvalue()
+    def _tostream(self, stream, skipprepack= False):
         '''
-        Convert the struct into a bytes buffer. This is the standard way to convert a NamedStruct to bytes.
+        Convert the struct into a bytes stream. This is the standard way to convert a NamedStruct to bytes.
         
-        :param buffer: a list of bytes to get the result
+        :param stream: a list of bytes to get the result
         
         :param skipprepack: if True, the prepack stage is skipped. For parser internal use.
         
@@ -164,10 +161,10 @@ class NamedStruct(object):
         '''
         if not skipprepack:
             self._prepack()
-        datasize = self._packto(buffer)
+        datasize = self._packto(stream)
         paddingSize = self._parser.paddingsize2(datasize)
         if paddingSize > datasize:
-            buffer.append(b'\x00' * (paddingSize - datasize))
+            stream.write(b'\x00' * (paddingSize - datasize))
         return paddingSize
     def _realsize(self):
         '''
@@ -781,40 +778,38 @@ class Parser(object):
         :returns: packed bytes
         '''
         return namedstruct._tobytes(skipprepack)
-    def tobuffer(self, namedstruct, buffer, skipprepack = False):
+    def tostream(self, namedstruct, stream, skipprepack = False):
         '''
-        Convert a NamedStruct to packed bytes, append the bytes to the buffer
+        Convert a NamedStruct to packed bytes, append the bytes to the stream
         
         :param namedstruct: a NamedStruct object of this type to pack.
         
         :param skipprepack: if True, the prepack stage is skipped.
         
-        :param buffer: a list of string to accept the result
+        :param stream: a buffered stream
         
         :return: appended bytes size
         '''
-        return namedstruct._tobuffer(buffer, skipprepack)
+        return namedstruct._tostream(stream, skipprepack)
     def prepack(self, namedstruct):
         '''
         Run prepack
         '''
         if self.prepackfunc is not None:
             self.prepackfunc(namedstruct)
-    def packto(self, namedstruct, buffer):
+    def packto(self, namedstruct, stream):
         """
-        Pack a struct to a buffer
+        Pack a struct to a stream
         
         :param namedstruct: struct to pack
         
-        :param buffer: A list of bytes. Append bytes to
-                       this list to prevent copying
+        :param stream: a buffered stream
         
         :return: appended bytes size
         """
         # Default implementation
         data = self.pack(namedstruct)
-        buffer.append(data)
-        return len(data)
+        return stream.write(data)
 
 
 class FormatParser(Parser):
@@ -1029,7 +1024,7 @@ class SequencedParser(Parser):
         except:
             return b''
 
-    def packto(self, namedstruct, buffer):
+    def packto(self, namedstruct, stream):
         s = namedstruct
         inlineparent = s._target
         seqiter = iter(s._seqs)
@@ -1040,35 +1035,35 @@ class SequencedParser(Parser):
                 v = getattr(inlineparent, name[0])
                 for i in range(0, name[1]):
                     if i >= len(v):
-                        totalsize += _tobuffer(p, p.new(), buffer)
+                        totalsize += _tostream(p, p.new(), stream)
                     else:
-                        totalsize += _tobuffer(p, v[i], buffer)
+                        totalsize += _tostream(p, v[i], stream)
             else:
                 if name is not None:
                     v = getattr(inlineparent, name[0])
-                    totalsize += _tobuffer(p, v, buffer)
+                    totalsize += _tostream(p, v, stream)
                 else:
                     v = next(seqiter)
-                    totalsize += _tobuffer(p, v, buffer, True)
+                    totalsize += _tostream(p, v, stream, True)
         if hasattr(self, 'extra'):
             p, name = self.extra
             if name is not None and len(name) > 1:
                 v = getattr(inlineparent, name[0])
                 for es in v:
-                    totalsize += _tobuffer(p, es, buffer)
+                    totalsize += _tostream(p, es, stream)
             else:
                 if name is None:
                     v = next(seqiter)
-                    totalsize += _tobuffer(p, v, buffer, True)
+                    totalsize += _tostream(p, v, stream, True)
                 else:
                     v = getattr(inlineparent, name[0])
-                    totalsize += _tobuffer(p, v, buffer)
+                    totalsize += _tostream(p, v, stream)
         return totalsize
 
     def pack(self, namedstruct):
-        buffer = []
-        self.packto(namedstruct, buffer)
-        return b''.join(buffer)
+        stream = BytesIO()
+        self.packto(namedstruct, stream)
+        return stream.getvalue()
 
     def _new(self, inlineparent = None):
         s = _create_struct(self, inlineparent)
@@ -1192,10 +1187,10 @@ class PrimitiveParser(object):
         Compatible to Parser.tobytes()
         '''
         return self.struct.pack(prim)
-    def tobuffer(self, prim, buffer, skipprepack = False):
+    def tostream(self, prim, stream, skipprepack = False):
         r = self.tobytes(prim, skipprepack=skipprepack)
-        buffer.append(r)
-        return len(r)
+        return stream.write(r)
+
 
 class ArrayParser(object):
     '''
@@ -1273,19 +1268,19 @@ class ArrayParser(object):
         '''
         Compatible to Parser.tobytes()
         '''
-        buffer = []
-        self.tobuffer(prim, buffer, skipprepack=skipprepack)
-        return b''.join(buffer)
-    def tobuffer(self, prim, buffer, skipprepack = False):
+        stream = BytesIO()
+        self.tostream(prim, stream, skipprepack=skipprepack)
+        return stream.getvalue()
+    def tostream(self, prim, stream, skipprepack = False):
         arraysize = self.size
         totalsize = 0
         if arraysize == 0:
             arraysize = len(prim)
         for i in range(0, arraysize):
             if i >= len(prim):
-                totalsize += _tobuffer(self.innerparser, self.innerparser.new(), buffer)
+                totalsize += _tostream(self.innerparser, self.innerparser.new(), stream)
             else:
-                totalsize += _tobuffer(self.innerparser, prim[i], buffer)
+                totalsize += _tostream(self.innerparser, prim[i], stream)
         return totalsize
 
 
@@ -1331,9 +1326,9 @@ class RawParser(object):
         Compatible to Parser.tobytes()
         '''
         return prim
-    def tobuffer(self, prim, buffer, skipprepack = False):
-        buffer.append(prim)
-        return len(prim)
+    def tostream(self, prim, stream, skipprepack = False):
+        return stream.write(prim)
+
 
 class CstrParser(object):
     '''
@@ -1363,9 +1358,9 @@ class CstrParser(object):
         return self.sizeof(prim)
     def tobytes(self, prim, skipprepack = False):
         return prim + b'\x00'
-    def tobuffer(self, prim, buffer, skipprepack = False):
-        buffer.append(prim)
-        buffer.append(b'\x00')
+    def tostream(self, prim, stream, skipprepack = False):
+        stream.write(prim)
+        stream.write(b'\x00')
         return len(prim) + 1
 
 class typedef(object):
@@ -2763,14 +2758,13 @@ class DArrayParser(Parser):
         else:
             return data[size:]
     def pack(self, namedstruct):
-        buffer = []
+        buffer = BytesIO()
         self.packto(namedstruct, buffer)
-        return b''.join(buffer)
-        return b''.join(self.innertypeparser.tobytes(i) for i in getattr(namedstruct, self.name))
-    def packto(self, namedstruct, buffer):
+        return buffer.getvalue()
+    def packto(self, namedstruct, stream):
         totalsize = 0
         for item in getattr(namedstruct, self.name):
-            totalsize += _tobuffer(self.innertypeparser, item, buffer)
+            totalsize += _tostream(self.innertypeparser, item, stream)
         return totalsize
     def sizeof(self, namedstruct):
         return sum(self.innertypeparser.paddingsize(i) for i in getattr(namedstruct, self.name))
@@ -3127,9 +3121,9 @@ class VariantParser(Parser):
             return self.header.tobytes(namedstruct._seqs[0])
         else:
             return b''
-    def packto(self, namedstruct, buffer):
+    def packto(self, namedstruct, stream):
         if self.header is not None:
-            return _tobuffer(self.header, namedstruct._seqs[0], buffer)
+            return _tostream(self.header, namedstruct._seqs[0], stream)
         else:
             return 0
     def sizeof(self, namedstruct):
