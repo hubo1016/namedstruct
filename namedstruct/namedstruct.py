@@ -136,8 +136,13 @@ class NamedStruct(object):
         '''
         current = self
         while current is not None:
-            current._parser.prepack(current)
+            current._parser.prepack(current, skip_self = True)
+            current = getattr(current, '_sub', None)
+        current = self
+        while current is not None:
+            current._parser.prepack(current, skip_sub = True)
             current = getattr(current, '_sub', None)        
+
     def _tobytes(self, skipprepack = False):
         '''
         Convert the struct to bytes. This is the standard way to convert a NamedStruct to bytes.
@@ -507,8 +512,9 @@ def _copy(buffer):
             return buffer.tobytes()
         else:
             return buffer[:]
-    except:
+    except Exception:
         return buffer[:]
+
 
 def sizefromlen(limit, *properties):
     '''
@@ -665,8 +671,11 @@ class Parser(object):
     def parse(self, buffer, inlineparent = None):
         '''
         Try to parse the struct from bytes sequence. The bytes sequence is taken from a streaming source.
+        
         :param buffer: bytes sequence to be parsed from.
+        
         :param inlineparent: if specified, this struct is embedded in another struct.
+        
         :returns: None if the buffer does not have enough data for this struct (e.g. incomplete read
                 from socket); (struct, size) else, where struct is the parsed result (usually a NamedStruct object)
                 and size is the used bytes length, so you can start another parse from buffer[size:].
@@ -682,6 +691,7 @@ class Parser(object):
     def subclass(self, namedstruct):
         '''
         Sub-class a NamedStruct into correct sub types.
+        
         :param namedstruct: a NamedStruct of this type.
         '''
         cp = self
@@ -710,8 +720,11 @@ class Parser(object):
         '''
         Internal interface to parse from some data. Different from parse(), this interface returns "real" size
         (without padding), and does not sub-class the struct.
+        
         :param buffer: data to parse from.
+        
         :param inlineparent: if specified, this struct is embedded in another struct.
+        
         :returns: None if the buffer does not have enough data for this struct (e.g. incomplete read
                 from socket); (struct, size) else, where struct is the parsed result (usually a NamedStruct object)
                 and size is the REAL SIZE of the struct.
@@ -720,7 +733,9 @@ class Parser(object):
     def new(self, inlineparent = None):
         '''
         Create an empty struct of this type. "initfunc" is called on the created struct to initialize it.
+        
         :param inlineparent: if specified, this struct is embedded into another struct "inlineparent"
+        
         :returns: a created struct (usually a NamedStruct object)
         '''
         if self.base is not None:
@@ -745,8 +760,11 @@ class Parser(object):
         Create a struct and use all bytes of data. Different from parse(), this takes all data,
         store unused bytes in "extra" data of the struct. Some types like variable-length array
         may have different parse result with create() and parse().
+        
         :param data: bytes of a packed struct.
+        
         :param inlineparent: if specified, this struct is embedded in another struct "inlineparent"
+        
         :returns: a created NamedStruct object.
         '''
         if self.base is not None:
@@ -757,15 +775,21 @@ class Parser(object):
     def paddingsize(self, namedstruct):
         '''
         Return the size of the padded struct (including the "real" size and the padding bytes)
+        
         :param namedstruct: a NamedStruct object of this type.
+        
         :returns: size including both data and padding.
         '''
+        if self.base is not None:
+            return self.base.paddingsize(namedstruct)
         realsize = namedstruct._realsize()
         return (realsize + self.padding - 1) // self.padding * self.padding
     def paddingsize2(self, realsize):
         '''
         Return a padded size from realsize, for NamedStruct internal use.
         '''
+        if self.base is not None:
+            return self.base.paddingsize2(realsize)
         return (realsize + self.padding - 1) // self.padding * self.padding
     def tobytes(self, namedstruct, skipprepack = False):
         '''
@@ -791,11 +815,11 @@ class Parser(object):
         :return: appended bytes size
         '''
         return namedstruct._tostream(stream, skipprepack)
-    def prepack(self, namedstruct):
+    def prepack(self, namedstruct, skip_self=False, skip_sub=False):
         '''
         Run prepack
         '''
-        if self.prepackfunc is not None:
+        if not skip_self and self.prepackfunc is not None:
             self.prepackfunc(namedstruct)
     def packto(self, namedstruct, stream):
         """
@@ -810,6 +834,8 @@ class Parser(object):
         # Default implementation
         data = self.pack(namedstruct)
         return stream.write(data)
+    def fullprepack(self, value):
+        value._prepack()
 
 
 class FormatParser(Parser):
@@ -823,17 +849,29 @@ class FormatParser(Parser):
     def __init__(self, fmt, properties, sizefunc = None, prepackfunc = None, base = None, criteria = _never, padding = 8, endian = '>', initfunc = None, typedef = None, classifier = None, classifyby = None):
         '''
         Initializer.
+        
         :param fmt: a struct format string, without endian specifier. (e.g. 'IBB4sQ')
+        
         :param properties: property definitions.
+        
         :param sizefunc: function to retrieve struct size.
+        
         :param prepackfunc: function to be executed before pack.
+        
         :param base: base type of this parser.
+        
         :param criteria: see Parser.__init__
+        
         :param padding: see Parser.__init__
+        
         :param endian: endian specifier, default to '>' (Big endian, or network order)
+        
         :param initfunc: see Parser.__init__
+        
         :param typedef: see Parser.__init__
+        
         :param classifier: see Parser.__init__
+        
         :param classifyby: see Parser.__init__
         '''
         Parser.__init__(self, base, criteria, padding, initfunc, typedef, classifier, classifyby, prepackfunc)
@@ -870,8 +908,11 @@ class FormatParser(Parser):
         '''
         Unpack the struct from specified bytes. If the struct is sub-classed, definitions from the sub type
         is not unpacked.
+        
         :param data: bytes of the struct, including fields of sub type and "extra" data.
+        
         :param namedstruct: a NamedStruct object of this type
+        
         :returns: unused bytes from data, which forms data of the sub type and "extra" data. 
         '''
         try:
@@ -905,7 +946,9 @@ class FormatParser(Parser):
     def pack(self, namedstruct):
         '''
         Pack the struct and return the packed bytes.
+        
         :param namedstruct: a NamedStruct of this type.
+        
         :returns: packed bytes, only contains fields of definitions in this type, not the sub type and "extra" data.
         '''
         elements = []
@@ -928,18 +971,29 @@ class SequencedParser(Parser):
     def __init__(self, parserseq, sizefunc = None, prepackfunc = None, lastextra = True, base = None, criteria = _never, padding = 8, initfunc = None, typedef = None, classifier = None, classifyby = None):
         '''
         Initializer.
+        
         :param parserseq: parser sequence definitions.
+        
         :param sizefunc: function to retrieve struct size.
+        
         :param prepackfunc: function to be executed before pack.
+        
         :param lastextra: if True, the last field of this type will use all the available bytes, instead of
                 leaving them to sub type or "extra" data. If False, additional data is preserved for sub type and
                 "extra" data even if the last field can take more.
+        
         :param base: base type of this parser
+        
         :param criteria: see Parser.__init__
+        
         :param padding: see Parser.__init__
+        
         :param initfunc: see Parser.__init__
+        
         :param typedef: see Parser.__init__
+        
         :param classifier: see Parser.__init__
+        
         :param classifyby: see Parser.__init__
         '''
         Parser.__init__(self, base, criteria, padding, initfunc, typedef, classifier, classifyby, prepackfunc)
@@ -948,6 +1002,7 @@ class SequencedParser(Parser):
         if lastextra:
             self.parserseq = parserseq[0:-1]
             self.extra = parserseq[-1]
+
     def _parse(self, buffer, inlineparent = None):
         s = _create_struct(self, inlineparent)
         size = self._parseinner(buffer, s, True, False)
@@ -955,6 +1010,7 @@ class SequencedParser(Parser):
             return None
         else:
             return (s, size)
+
     def _parseinner(self, buffer, namedstruct, copy = False, useall = True):
         s = namedstruct
         inlineparent = s._target
@@ -1013,6 +1069,7 @@ class SequencedParser(Parser):
         else:
             _set(s, '_extra', _copy(buffer[start:size]))
         return size
+
     def unpack(self, data, namedstruct):
         size = self._parseinner(data, namedstruct, False, True)
         if size is None:
@@ -1035,13 +1092,16 @@ class SequencedParser(Parser):
                 v = getattr(inlineparent, name[0])
                 for i in range(0, name[1]):
                     if i >= len(v):
-                        totalsize += _tostream(p, p.new(), stream)
+                        tp = p.new()
+                        if hasattr(p, 'fullprepack'):
+                            p.fullprepack(tp)
+                        totalsize += _tostream(p, tp, stream, True)
                     else:
-                        totalsize += _tostream(p, v[i], stream)
+                        totalsize += _tostream(p, v[i], stream, True)
             else:
                 if name is not None:
                     v = getattr(inlineparent, name[0])
-                    totalsize += _tostream(p, v, stream)
+                    totalsize += _tostream(p, v, stream, True)
                 else:
                     v = next(seqiter)
                     totalsize += _tostream(p, v, stream, True)
@@ -1050,14 +1110,14 @@ class SequencedParser(Parser):
             if name is not None and len(name) > 1:
                 v = getattr(inlineparent, name[0])
                 for es in v:
-                    totalsize += _tostream(p, es, stream)
+                    totalsize += _tostream(p, es, stream, True)
             else:
                 if name is None:
                     v = next(seqiter)
                     totalsize += _tostream(p, v, stream, True)
                 else:
                     v = getattr(inlineparent, name[0])
-                    totalsize += _tostream(p, v, stream)
+                    totalsize += _tostream(p, v, stream, True)
         return totalsize
 
     def pack(self, namedstruct):
@@ -1105,6 +1165,9 @@ class SequencedParser(Parser):
                 v = getattr(inlineparent, name[0])
                 for i in range(0, name[1]):
                     if i >= len(v):
+                        tp = p.new()
+                        if hasattr(p, 'fullprepack'):
+                            p.fullprepack(tp)
                         size += p.paddingsize(p.new())
                     else:
                         size += p.paddingsize(v[i])
@@ -1127,11 +1190,41 @@ class SequencedParser(Parser):
                     v = getattr(inlineparent, name[0])
                 size += p.paddingsize(v)
         return size
-    def prepack(self, namedstruct):
-        for s in namedstruct._seqs:
-            if hasattr(s, '_prepack'):
-                s._prepack()
-        Parser.prepack(self, namedstruct)
+    def prepack(self, namedstruct, skip_self=False, skip_sub=False):
+        if not skip_sub:
+            s = namedstruct
+            inlineparent = s._target
+            seqiter = iter(s._seqs)
+            for p, name in self.parserseq:
+                if hasattr(p, 'fullprepack'):
+                    if name is not None and len(name) > 1:
+                        # Array
+                        v = getattr(inlineparent, name[0])
+                        for i in range(0, name[1]):
+                            if i < len(v):
+                                p.fullprepack(v[i])
+                    else:
+                        if name is not None:
+                            v = getattr(inlineparent, name[0])
+                            p.fullprepack(v)
+                        else:
+                            v = next(seqiter)
+                            p.fullprepack(v)
+            if hasattr(self, 'extra'):
+                p, name = self.extra
+                if hasattr(p, 'fullprepack'):
+                    if name is not None and len(name) > 1:
+                        v = getattr(inlineparent, name[0])
+                        for es in v:
+                            p.fullprepack(es)
+                    else:
+                        if name is None:
+                            v = next(seqiter)
+                            p.fullprepack(v)
+                        else:
+                            v = getattr(inlineparent, name[0])
+                            p.fullprepack(v)
+        Parser.prepack(self, namedstruct, skip_self, skip_sub)
 
 class PrimitiveParser(object):
     '''
@@ -1142,6 +1235,7 @@ class PrimitiveParser(object):
     def __init__(self, fmt, endian = '>'):
         '''
         :param fmt: struct format string of a primitive type without endian specifier (e.g. 'I')
+        
         :param endian: endian specifier, default to '>'
         '''
         self.struct = struct.Struct(endian + fmt)
@@ -1199,7 +1293,9 @@ class ArrayParser(object):
     def __init__(self, innerparser, size):
         '''
         Initializer.
+        
         :param innerparser: inner type parser.
+        
         :param size: array size. 0 for variable size array.
         '''
         self.innerparser = innerparser
@@ -1255,7 +1351,10 @@ class ArrayParser(object):
             arraysize = len(prim)
         for i in range(0, arraysize):
             if i >= len(prim):
-                size += self.innerparser.paddingsize(self.innerparser.new())
+                tp = self.innerparser.new()
+                if hasattr(self.innerparser, 'fullparse'):
+                    self.innerparser.fullparse(tp)
+                size += self.innerparser.paddingsize(tp)
             else:
                 size += self.innerparser.paddingsize(prim[i])
         return size
@@ -1278,10 +1377,17 @@ class ArrayParser(object):
             arraysize = len(prim)
         for i in range(0, arraysize):
             if i >= len(prim):
-                totalsize += _tostream(self.innerparser, self.innerparser.new(), stream)
+                tp = self.innerparser.new()
+                if hasattr(self.innerparser, 'fullprepack'):
+                    self.innerparser.fullprepack(tp)
+                totalsize += _tostream(self.innerparser, tp, stream)
             else:
                 totalsize += _tostream(self.innerparser, prim[i], stream)
         return totalsize
+    def fullprepack(self, value):
+        if hasattr(self.innerparser, 'fullprepack'):
+            for v in value:
+                self.innerparser.fullprepack(v)
 
 
 class RawParser(object):
@@ -1390,8 +1496,11 @@ class typedef(object):
         '''
         Create a object from all the bytes. If there are additional bytes, they may be fed greedily to
         a variable length type, or may be used as "extra" data.
+        
         :param buffer: bytes of a packed struct.
+        
         :returns: an object with exactly the same bytes when packed.
+        
         :raises: BadFormatError or BadLenError if the bytes cannot completely form this type.
         '''
         d = self.parser().create(buffer)
@@ -1435,6 +1544,7 @@ class typedef(object):
         Returns whether this type can be "inlined" into other types. If the type is inlined into other types,
         it is splitted and re-arranged to form a FormatParser to improve performance.
         If not, the parser is used instead.
+        
         :returns: None if this type cannot be inlined; a format definition similar to FormatParser if it can.
         '''
         return None
@@ -1442,6 +1552,7 @@ class typedef(object):
         '''
         Create an array type, with elements of this type. Also available as indexer([]), so
         mytype[12] creates a array with fixed size 12; mytype[0] creates a variable size array.
+        
         :param size: the size of the array, 0 for variable size array.
         '''
         return arraytype(self, size)
@@ -1491,6 +1602,7 @@ class arraytype(typedef):
     def __init__(self, innertype, size = 0):
         '''
         :param innertype: type of elements.
+        
         :param size: size of the array, 0 for variable size array, >0 for fixed size array.
         '''
         self.innertype = innertype
@@ -1565,11 +1677,14 @@ class prim(typedef):
     def __init__(self, fmt, readablename = None, endian = '>', strict = False):
         '''
         :param fmt: a Python struct format string without endian specify, like 'I' or 'B'
+        
         :param readablename: a human-readable name for this type, used in __repr__
+        
         :param endian: specify endian with struct format, default to '>' ("big endian" or "network order")
-                use '<' for little endian; do not use ''.
+                       use '<' for little endian; do not use ''.
+        
         :param strict: disallow this type to be inlined. Only use strict = True if you want to
-                use this type in structs with different endian (e.g. little endian integer in a big endian struct)
+                       use this type in structs with different endian (e.g. little endian integer in a big endian struct)
         '''
         typedef.__init__(self)
         self._format = fmt
@@ -1641,23 +1756,36 @@ class fixedstruct(typedef):
     def __init__(self, fmt, properties, sizefunc = None, prepackfunc = None, base = None, criteria = _never, padding = 8, endian = '>', readablename = None, inlineself = None, initfunc = None, nstructtype = None, classifier = None, classifyby = None):
         '''
         :param fmt: struct format string
+        
         :param properties: field definitions
+        
         :param sizefunc: function to retrieve struct size
+        
         :param prepackfunc: function to be executed before struct pack
+        
         :param base: base type of this type
+        
         :param criteria: criteria of sub-class from base to this type
+        
         :param padding: align the struct to padding-bytes boundaries
+        
         :param endian: endian of this struct in struct format string, default to '>' (big endian)
+        
         :param readablename: specify a human-readable name for this type, used in __repr__
+        
         :param inlineself: True to allow "inline" this type into other types; False to disallow.
-                If specify None, it is automatically determined from the structure size and other paramters.
+                           If specify None, it is automatically determined from the structure size and other paramters.
+        
         :param initfunc: function to be executed on new() (object creation), the "initializer"
+        
         :param nstructtype: when a nstruct type is fully converted to a fixedstruct type, this parameter
-                is provided to wrap this type as needed.
+                            is provided to wrap this type as needed.
+        
         :param classifier: if specified, a value is calculated by classifier(self) when sub-classing, to
-                determine the sub type, instead of using criteria on every sub type.
+                           determine the sub type, instead of using criteria on every sub type.
+        
         :param classifyby: a tuple, if specified and the parent type has a classifier, the base type will
-                be sub-classed into this type if the calculated value of classifier is in this tuple.
+                           be sub-classed into this type if the calculated value of classifier is in this tuple.
         '''
         self.sizefunc = sizefunc
         self.prepackfunc = prepackfunc
@@ -1869,7 +1997,9 @@ class nstruct(typedef):
     cannot be sub-classed. If the base type does not have a *size* option, it is not possible to parse the
     struct and sub-class it from a bytes stream. But it is still possible to use create() to create the struct
     and automatically sub-class it. It is useless to set *size* option on a struct type with base type, though
-    not harmful. *prepack* can still be used, and will be executed in base first, then the sub-class type.
+    not harmful. *prepack* can still be used, and will be executed from base to subclasses. If fields have their
+    own *prepack* method, they are executed in the defined order, before any *prepack* methods defined in the
+    parent (not matter base or subclass).
     
     If there are still bytes not used by the sub-class type, they are stored as the "extra" data of the
     sub-class type, so the sub-class type can be sub-classed again. Also _getextra and _setextra can be used.
@@ -2591,6 +2721,7 @@ class OptionalParser(Parser):
         self.basetypeparser = basetypeparser
         self.name = name
         self.criteria = criteria
+
     def _parseinner(self, data, s, create = False):
         if self.criteria(s):
             if create:
@@ -2604,7 +2735,8 @@ class OptionalParser(Parser):
             setattr(s._target, self.name, inner)
             return size
         else:
-            return 0       
+            return 0
+
     def _parse(self, data, inlineparent = None):
         s = _create_struct(self, inlineparent)
         size = self._parseinner(data, s)
@@ -2612,24 +2744,46 @@ class OptionalParser(Parser):
             return None
         else:
             return (s, size)
+
     def _new(self, inlineparent=None):
         return _create_struct(self, inlineparent)
+
     def unpack(self, data, namedstruct):
         size = self._parseinner(data, namedstruct, True)
         if size is None:
             raise BadLenError('Bad Len')
         else:
             return data[size:]
+
     def pack(self, namedstruct):
-        data = b''
         if hasattr(namedstruct, self.name):
-            data = self.basetypeparser.tobytes(getattr(namedstruct, self.name))
-        return data
+            return self.basetypeparser.tobytes(getattr(namedstruct, self.name), True)
+        else:
+            return b''
+
+    def packto(self, namedstruct, stream):
+        """
+        Pack a struct to a stream
+        """
+        if hasattr(namedstruct, self.name):
+            return _tostream(self.basetypeparser, getattr(namedstruct, self.name), stream, True)
+        else:
+            return 0
+
     def sizeof(self, namedstruct):
         if hasattr(namedstruct, self.name):
             return self.basetypeparser.paddingsize(getattr(namedstruct, self.name))
         else:
             return 0
+
+    def prepack(self, namedstruct, skip_self=False, skip_sub=False):
+        '''
+        Run prepack
+        '''
+        if not skip_sub and hasattr(namedstruct, self.name) and hasattr(self.basetypeparser, 'fullprepack'):
+            self.basetypeparser.fullprepack(getattr(namedstruct, self.name))
+        Parser.prepack(self, namedstruct, skip_self, skip_sub)
+
 
 class optional(typedef):
     '''
@@ -2761,13 +2915,25 @@ class DArrayParser(Parser):
         buffer = BytesIO()
         self.packto(namedstruct, buffer)
         return buffer.getvalue()
+
     def packto(self, namedstruct, stream):
         totalsize = 0
         for item in getattr(namedstruct, self.name):
             totalsize += _tostream(self.innertypeparser, item, stream)
         return totalsize
+
     def sizeof(self, namedstruct):
         return sum(self.innertypeparser.paddingsize(i) for i in getattr(namedstruct, self.name))
+    
+    def prepack(self, namedstruct, skip_self=False, skip_sub=False):
+        '''
+        Run prepack
+        '''
+        if not skip_sub and hasattr(self.innertypeparser, 'fullprepack'):
+            for v in getattr(namedstruct, self.name):
+                self.innertypeparser.fullprepack(v)
+        Parser.prepack(self, namedstruct, skip_self, skip_sub)    
+
 
 class darray(typedef):
     '''
@@ -3118,12 +3284,12 @@ class VariantParser(Parser):
             return data[size:]
     def pack(self, namedstruct):
         if self.header is not None:
-            return self.header.tobytes(namedstruct._seqs[0])
+            return self.header.tobytes(namedstruct._seqs[0], True)
         else:
             return b''
     def packto(self, namedstruct, stream):
         if self.header is not None:
-            return _tostream(self.header, namedstruct._seqs[0], stream)
+            return _tostream(self.header, namedstruct._seqs[0], stream, True)
         else:
             return 0
     def sizeof(self, namedstruct):
@@ -3131,6 +3297,13 @@ class VariantParser(Parser):
             return self.header.paddingsize(namedstruct._seqs[0])
         else:
             return 0
+    def prepack(self, namedstruct, skip_self=False, skip_sub=False):
+        '''
+        Run prepack
+        '''
+        if not skip_sub and self.header is not None and hasattr(self.header, 'fullprepack'):
+            self.header.fullprepack(namedstruct._seqs[0])
+        Parser.prepack(self, namedstruct, skip_self, skip_sub)
 
 
 class nvariant(typedef):
